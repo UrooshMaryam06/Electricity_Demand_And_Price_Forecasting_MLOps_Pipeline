@@ -1,0 +1,1069 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>GridMind — Energy Forecasting Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+  /* ── CONFIG: change this one line if your API moves ── */
+  :root {
+    --api: "http://localhost:8000"; /* JS reads window.API_BASE below */
+
+    --bg:       #0a0e17;
+    --surface:  #111827;
+    --surface2: #1a2234;
+    --border:   #1e2d45;
+    --accent:   #00e5ff;
+    --accent2:  #7c3aed;
+    --green:    #10b981;
+    --yellow:   #f59e0b;
+    --red:      #ef4444;
+    --text:     #e2e8f0;
+    --muted:    #64748b;
+    --font-head: 'Syne', sans-serif;
+    --font-mono: 'Space Mono', monospace;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-mono);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* grid noise texture overlay */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      repeating-linear-gradient(0deg, transparent, transparent 39px, rgba(0,229,255,0.03) 40px),
+      repeating-linear-gradient(90deg, transparent, transparent 39px, rgba(0,229,255,0.03) 40px);
+    pointer-events: none; z-index: 0;
+  }
+
+  /* ── HEADER ── */
+  header {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(10,14,23,0.92);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 2rem;
+    display: flex; align-items: center; justify-content: space-between;
+    height: 64px;
+  }
+  .logo {
+    font-family: var(--font-head);
+    font-weight: 800; font-size: 1.4rem;
+    letter-spacing: -0.02em;
+    color: var(--accent);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .logo-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.5)} }
+
+  #api-status {
+    font-size: .75rem; display: flex; align-items: center; gap: 8px;
+  }
+  #status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); transition: background .4s; }
+  #status-dot.online  { background: var(--green); box-shadow: 0 0 8px var(--green); }
+  #status-dot.offline { background: var(--red);   box-shadow: 0 0 8px var(--red); }
+
+  /* ── NAV TABS ── */
+  nav {
+    display: flex; gap: 4px;
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 0 2rem; overflow-x: auto;
+  }
+  .tab {
+    padding: .75rem 1.25rem; cursor: pointer;
+    font-family: var(--font-head); font-size: .8rem; font-weight: 600;
+    letter-spacing: .08em; text-transform: uppercase;
+    color: var(--muted); border-bottom: 2px solid transparent;
+    transition: all .2s; white-space: nowrap;
+    background: none; border-top: none; border-left: none; border-right: none;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* ── MAIN LAYOUT ── */
+  main { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; padding: 2rem; }
+
+  .page { display: none; }
+  .page.active { display: block; animation: fadeIn .3s ease; }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+
+  /* ── CARDS ── */
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 1.5rem;
+    position: relative; overflow: hidden;
+  }
+  .card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    opacity: 0; transition: opacity .3s;
+  }
+  .card:hover::before { opacity: 1; }
+
+  .card-title {
+    font-family: var(--font-head); font-size: .7rem; font-weight: 700;
+    letter-spacing: .12em; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 1rem;
+  }
+
+  /* ── GRID LAYOUTS ── */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
+  @media (max-width: 900px) {
+    .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+  }
+
+  /* ── STAT CARDS ── */
+  .stat-value {
+    font-family: var(--font-head); font-size: 2rem; font-weight: 800;
+    line-height: 1; color: var(--accent);
+  }
+  .stat-label { font-size: .7rem; color: var(--muted); margin-top: .4rem; letter-spacing: .1em; }
+  .badge {
+    display: inline-block; padding: 3px 10px; border-radius: 4px;
+    font-size: .7rem; font-weight: 700; letter-spacing: .08em;
+    font-family: var(--font-head);
+  }
+  .badge-low    { background: rgba(16,185,129,.15); color: var(--green); border: 1px solid rgba(16,185,129,.3); }
+  .badge-medium { background: rgba(245,158,11,.15);  color: var(--yellow); border: 1px solid rgba(245,158,11,.3); }
+  .badge-high   { background: rgba(239,68,68,.15);   color: var(--red);    border: 1px solid rgba(239,68,68,.3); }
+
+  /* ── FORMS ── */
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem; }
+  .form-group { display: flex; flex-direction: column; gap: 6px; }
+  label { font-size: .7rem; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
+  input, select {
+    background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); border-radius: 6px; padding: .5rem .75rem;
+    font-family: var(--font-mono); font-size: .8rem;
+    transition: border-color .2s;
+    width: 100%;
+  }
+  input:focus, select:focus {
+    outline: none; border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(0,229,255,.1);
+  }
+  input[type=range] {
+    padding: 0; background: none; border: none;
+    accent-color: var(--accent);
+  }
+
+  /* ── BUTTONS ── */
+  .btn {
+    padding: .65rem 1.5rem; border-radius: 6px; border: none;
+    font-family: var(--font-head); font-size: .8rem; font-weight: 700;
+    letter-spacing: .08em; text-transform: uppercase;
+    cursor: pointer; transition: all .2s;
+  }
+  .btn-primary {
+    background: var(--accent); color: var(--bg);
+  }
+  .btn-primary:hover { opacity: .85; transform: translateY(-1px); box-shadow: 0 4px 20px rgba(0,229,255,.3); }
+  .btn-secondary {
+    background: transparent; color: var(--accent);
+    border: 1px solid var(--accent);
+  }
+  .btn-secondary:hover { background: rgba(0,229,255,.08); }
+  .btn:disabled { opacity: .4; cursor: not-allowed; transform: none !important; }
+
+  /* ── RESULT BOX ── */
+  .result-box {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 1.25rem;
+    font-size: .8rem; line-height: 1.8;
+    display: none;
+  }
+  .result-box.show { display: block; animation: fadeIn .3s ease; }
+  .result-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,.04); }
+  .result-row:last-child { border-bottom: none; }
+  .result-key { color: var(--muted); }
+  .result-val { color: var(--accent); font-weight: 700; }
+
+  /* ── RECOMMENDATION BOX ── */
+  .rec-box {
+    background: linear-gradient(135deg, rgba(124,58,237,.1), rgba(0,229,255,.05));
+    border: 1px solid rgba(124,58,237,.3);
+    border-radius: 8px; padding: 1.25rem;
+    margin-top: 1rem;
+  }
+  .rec-label { font-size: .65rem; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; margin-bottom: .5rem; }
+  .rec-text { font-family: var(--font-head); font-size: 1rem; font-weight: 600; color: var(--text); line-height: 1.5; }
+
+  /* ── LOADER ── */
+  .loader {
+    display: inline-block; width: 16px; height: 16px;
+    border: 2px solid var(--border); border-top-color: var(--accent);
+    border-radius: 50%; animation: spin .6s linear infinite;
+    vertical-align: middle; margin-right: 8px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── ERROR ── */
+  .error-box {
+    background: rgba(239,68,68,.08); border: 1px solid rgba(239,68,68,.3);
+    border-radius: 8px; padding: 1rem; margin-top: 1rem;
+    font-size: .8rem; color: var(--red); display: none;
+  }
+  .error-box.show { display: block; }
+
+  /* ── CLUSTER PROFILE TABLE ── */
+  table { width: 100%; border-collapse: collapse; font-size: .8rem; }
+  th {
+    text-align: left; padding: .6rem .75rem;
+    font-size: .65rem; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--muted); border-bottom: 1px solid var(--border);
+    font-family: var(--font-head);
+  }
+  td { padding: .6rem .75rem; border-bottom: 1px solid rgba(255,255,255,.04); }
+  tr:hover td { background: rgba(0,229,255,.03); }
+  .cluster-id {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; border-radius: 6px;
+    font-family: var(--font-head); font-weight: 700; font-size: .75rem;
+    background: rgba(0,229,255,.1); color: var(--accent);
+  }
+
+  /* ── MODEL INFO ── */
+  .model-chip {
+    display: inline-block; background: var(--surface2);
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: .4rem .8rem; font-size: .75rem; margin: .25rem;
+    font-family: var(--font-head);
+  }
+  .model-chip span { color: var(--accent); font-weight: 700; }
+
+  /* ── SECTION HEADER ── */
+  .section-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 1.5rem;
+  }
+  .section-title {
+    font-family: var(--font-head); font-size: 1.4rem; font-weight: 800;
+    letter-spacing: -.02em;
+  }
+  .section-sub { font-size: .75rem; color: var(--muted); margin-top: 4px; }
+
+  /* ── THRESHOLD BAR ── */
+  .threshold-bar { margin: 1rem 0; }
+  .tbar-label { font-size: .7rem; color: var(--muted); margin-bottom: .4rem; display: flex; justify-content: space-between; }
+  .tbar-track {
+    height: 6px; border-radius: 3px;
+    background: linear-gradient(90deg, var(--green) 0%, var(--green) 33%, var(--yellow) 33%, var(--yellow) 66%, var(--red) 66%);
+  }
+  .tbar-labels { display: flex; justify-content: space-between; font-size: .65rem; color: var(--muted); margin-top: 4px; }
+
+  /* ── HISTORY LIST ── */
+  .history-item {
+    display: flex; gap: 1rem; align-items: flex-start;
+    padding: .75rem 0; border-bottom: 1px solid rgba(255,255,255,.04);
+    font-size: .75rem;
+  }
+  .history-time { color: var(--muted); white-space: nowrap; min-width: 80px; }
+  .history-badge { white-space: nowrap; }
+
+  /* ── SIMILAR HOURS ── */
+  .sim-chip {
+    display: inline-block; background: rgba(124,58,237,.1);
+    border: 1px solid rgba(124,58,237,.2); border-radius: 4px;
+    padding: 2px 8px; font-size: .7rem; margin: 2px;
+    color: #a78bfa;
+  }
+
+  /* scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+  .mt-1 { margin-top: .5rem; }
+  .mt-2 { margin-top: 1rem; }
+  .mt-3 { margin-top: 1.5rem; }
+  .mb-2 { margin-bottom: 1rem; }
+  .gap-1 { gap: .5rem; }
+  .flex { display: flex; }
+  .items-center { align-items: center; }
+  .flex-wrap { flex-wrap: wrap; }
+  .text-accent { color: var(--accent); }
+  .full { grid-column: 1 / -1; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-dot"></div>
+    GridMind
+  </div>
+  <div id="api-status">
+    <div id="status-dot"></div>
+    <span id="status-text">Connecting…</span>
+  </div>
+</header>
+
+<nav>
+  <button class="tab active" onclick="switchTab('predict')">⚡ Predict</button>
+  <button class="tab" onclick="switchTab('classify')">🏷 Classify</button>
+  <button class="tab" onclick="switchTab('cluster')">🔵 Cluster</button>
+  <button class="tab" onclick="switchTab('recommend')">🎯 Recommend</button>
+  <button class="tab" onclick="switchTab('profiles')">📊 Cluster Profiles</button>
+  <button class="tab" onclick="switchTab('models')">🧠 Models</button>
+  <button class="tab" onclick="switchTab('history')">🕘 History</button>
+</nav>
+
+<main>
+
+<!-- ══════════════════════════════════════════════
+     PAGE: PREDICT
+══════════════════════════════════════════════ -->
+<div id="page-predict" class="page active">
+  <div class="section-header">
+    <div>
+      <div class="section-title">Demand & Price Forecast</div>
+      <div class="section-sub">12-hour ahead regression predictions</div>
+    </div>
+    <button class="btn btn-secondary" onclick="fillDemo('predict')">Load Demo Values</button>
+  </div>
+
+  <div class="card mb-2">
+    <div class="card-title">Time Context</div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Hour (0–23)</label>
+        <input type="number" id="p_hour" min="0" max="23" value="14"/>
+      </div>
+      <div class="form-group">
+        <label>Day of Week (0=Mon)</label>
+        <input type="number" id="p_dow" min="0" max="6" value="2"/>
+      </div>
+      <div class="form-group">
+        <label>Month (1–12)</label>
+        <input type="number" id="p_month" min="1" max="12" value="6"/>
+      </div>
+      <div class="form-group">
+        <label>Is Weekend</label>
+        <select id="p_weekend">
+          <option value="0">No (Weekday)</option>
+          <option value="1">Yes (Weekend)</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-2">
+    <div class="card-title">Lag Features</div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Demand Lag 1h (MW)</label>
+        <input type="number" id="p_d1" value="28500" step="100"/>
+      </div>
+      <div class="form-group">
+        <label>Demand Lag 24h (MW)</label>
+        <input type="number" id="p_d24" value="29000" step="100"/>
+      </div>
+      <div class="form-group">
+        <label>Demand Lag 168h (MW)</label>
+        <input type="number" id="p_d168" value="27800" step="100"/>
+      </div>
+      <div class="form-group">
+        <label>Price Lag 1h (EUR/MWh)</label>
+        <input type="number" id="p_p1" value="52.3" step="0.1"/>
+      </div>
+      <div class="form-group">
+        <label>Price Lag 24h (EUR/MWh)</label>
+        <input type="number" id="p_p24" value="48.7" step="0.1"/>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-2">
+    <div class="card-title">Generation Mix</div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Renewable (MW)</label>
+        <input type="number" id="p_ren" value="12000" step="100"/>
+      </div>
+      <div class="form-group">
+        <label>Fossil (MW)</label>
+        <input type="number" id="p_fos" value="14000" step="100"/>
+      </div>
+      <div class="form-group">
+        <label>Nuclear (MW)</label>
+        <input type="number" id="p_nuc" value="6000" step="100"/>
+      </div>
+      <div class="form-group">
+        <label>Renewable % of Total</label>
+        <input type="number" id="p_rpct" value="37.5" step="0.1" min="0" max="100"/>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-2">
+    <div class="card-title">Rolling Averages & Forecasts</div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Demand Avg 24h (MW)</label>
+        <input type="number" id="p_davg" value="28200" step="100"/>
+      </div>
+      <div class="form-group">
+        <label>Price Avg 24h (EUR/MWh)</label>
+        <input type="number" id="p_pavg" value="50.1" step="0.1"/>
+      </div>
+      <div class="form-group">
+        <label>Wind Forecast (MW) <span style="color:var(--muted)">[optional]</span></label>
+        <input type="number" id="p_wind" value="5200" step="100"/>
+      </div>
+      <div class="form-group">
+        <label>Solar Forecast (MW) <span style="color:var(--muted)">[optional]</span></label>
+        <input type="number" id="p_solar" value="3100" step="100"/>
+      </div>
+      <div class="form-group">
+        <label>Total Load Forecast (MW) <span style="color:var(--muted)">[optional]</span></label>
+        <input type="number" id="p_load" value="30000" step="100"/>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:1rem;margin-bottom:1.5rem;flex-wrap:wrap;">
+    <button class="btn btn-primary" onclick="predictBoth()">
+      <span id="predict-btn-text">⚡ Run Forecast</span>
+    </button>
+    <button class="btn btn-secondary" onclick="predictDemandOnly()">Demand Only</button>
+    <button class="btn btn-secondary" onclick="predictPriceOnly()">Price Only</button>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title">Forecast Results</div>
+      <div id="predict-result" class="result-box"></div>
+      <div id="predict-error" class="error-box"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Visual Indicators</div>
+      <div id="predict-visual">
+        <div style="color:var(--muted);font-size:.8rem;margin-top:.5rem;">Run a forecast to see visual indicators.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     PAGE: CLASSIFY
+══════════════════════════════════════════════ -->
+<div id="page-classify" class="page">
+  <div class="section-header">
+    <div>
+      <div class="section-title">Demand & Price Classification</div>
+      <div class="section-sub">Low / Medium / High regime classifier</div>
+    </div>
+    <button class="btn btn-secondary" onclick="fillDemo('classify')">Load Demo Values</button>
+  </div>
+  <div class="card mb-2">
+    <div class="card-title">Input Features</div>
+    <div class="form-grid">
+      <div class="form-group"><label>Hour</label><input type="number" id="c_hour" min="0" max="23" value="14"/></div>
+      <div class="form-group"><label>Day of Week</label><input type="number" id="c_dow" min="0" max="6" value="2"/></div>
+      <div class="form-group"><label>Month</label><input type="number" id="c_month" min="1" max="12" value="6"/></div>
+      <div class="form-group"><label>Is Weekend</label><select id="c_weekend"><option value="0">No</option><option value="1">Yes</option></select></div>
+      <div class="form-group"><label>Demand Lag 1h (MW)</label><input type="number" id="c_d1" value="28500"/></div>
+      <div class="form-group"><label>Demand Lag 24h (MW)</label><input type="number" id="c_d24" value="29000"/></div>
+      <div class="form-group"><label>Demand Lag 168h (MW)</label><input type="number" id="c_d168" value="27800"/></div>
+      <div class="form-group"><label>Price Lag 1h (EUR/MWh)</label><input type="number" id="c_p1" value="52.3"/></div>
+      <div class="form-group"><label>Price Lag 24h (EUR/MWh)</label><input type="number" id="c_p24" value="48.7"/></div>
+      <div class="form-group"><label>Renewable (MW)</label><input type="number" id="c_ren" value="12000"/></div>
+      <div class="form-group"><label>Fossil (MW)</label><input type="number" id="c_fos" value="14000"/></div>
+      <div class="form-group"><label>Nuclear (MW)</label><input type="number" id="c_nuc" value="6000"/></div>
+      <div class="form-group"><label>Renewable %</label><input type="number" id="c_rpct" value="37.5"/></div>
+      <div class="form-group"><label>Demand Avg 24h</label><input type="number" id="c_davg" value="28200"/></div>
+      <div class="form-group"><label>Price Avg 24h</label><input type="number" id="c_pavg" value="50.1"/></div>
+    </div>
+  </div>
+  <div style="display:flex;gap:1rem;margin-bottom:1.5rem;flex-wrap:wrap;">
+    <button class="btn btn-primary" onclick="classifyBoth()">🏷 Classify Both</button>
+    <button class="btn btn-secondary" onclick="classifyDemand()">Demand Only</button>
+    <button class="btn btn-secondary" onclick="classifyPrice()">Price Only</button>
+  </div>
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title">Demand Regime</div>
+      <div id="clf-demand-result" class="result-box"></div>
+      <div id="clf-demand-error" class="error-box"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Price Regime</div>
+      <div id="clf-price-result" class="result-box"></div>
+      <div id="clf-price-error" class="error-box"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     PAGE: CLUSTER
+══════════════════════════════════════════════ -->
+<div id="page-cluster" class="page">
+  <div class="section-header">
+    <div>
+      <div class="section-title">Energy Regime Clustering</div>
+      <div class="section-sub">KMeans cluster assignment for the current hour</div>
+    </div>
+    <button class="btn btn-secondary" onclick="fillDemo('cluster')">Load Demo Values</button>
+  </div>
+  <div class="card mb-2">
+    <div class="card-title">Input Features</div>
+    <div class="form-grid">
+      <div class="form-group"><label>Hour</label><input type="number" id="cl_hour" min="0" max="23" value="14"/></div>
+      <div class="form-group"><label>Day of Week</label><input type="number" id="cl_dow" min="0" max="6" value="2"/></div>
+      <div class="form-group"><label>Month</label><input type="number" id="cl_month" min="1" max="12" value="6"/></div>
+      <div class="form-group"><label>Is Weekend</label><select id="cl_weekend"><option value="0">No</option><option value="1">Yes</option></select></div>
+      <div class="form-group"><label>Demand Lag 1h (MW)</label><input type="number" id="cl_d1" value="28500"/></div>
+      <div class="form-group"><label>Demand Lag 24h (MW)</label><input type="number" id="cl_d24" value="29000"/></div>
+      <div class="form-group"><label>Demand Lag 168h (MW)</label><input type="number" id="cl_d168" value="27800"/></div>
+      <div class="form-group"><label>Price Lag 1h (EUR/MWh)</label><input type="number" id="cl_p1" value="52.3"/></div>
+      <div class="form-group"><label>Price Lag 24h (EUR/MWh)</label><input type="number" id="cl_p24" value="48.7"/></div>
+      <div class="form-group"><label>Renewable (MW)</label><input type="number" id="cl_ren" value="12000"/></div>
+      <div class="form-group"><label>Fossil (MW)</label><input type="number" id="cl_fos" value="14000"/></div>
+      <div class="form-group"><label>Nuclear (MW)</label><input type="number" id="cl_nuc" value="6000"/></div>
+      <div class="form-group"><label>Renewable %</label><input type="number" id="cl_rpct" value="37.5"/></div>
+      <div class="form-group"><label>Demand Avg 24h</label><input type="number" id="cl_davg" value="28200"/></div>
+      <div class="form-group"><label>Price Avg 24h</label><input type="number" id="cl_pavg" value="50.1"/></div>
+    </div>
+  </div>
+  <button class="btn btn-primary mb-2" onclick="runCluster()">🔵 Assign Cluster</button>
+  <div class="card">
+    <div class="card-title">Cluster Result</div>
+    <div id="cluster-result" class="result-box"></div>
+    <div id="cluster-error" class="error-box"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     PAGE: RECOMMEND
+══════════════════════════════════════════════ -->
+<div id="page-recommend" class="page">
+  <div class="section-header">
+    <div>
+      <div class="section-title">Grid Recommendation Engine</div>
+      <div class="section-sub">Full pipeline: regression → classification → clustering → recommendation</div>
+    </div>
+    <button class="btn btn-secondary" onclick="fillDemo('recommend')">Load Demo Values</button>
+  </div>
+
+  <div class="grid-2 mb-2">
+    <div class="card">
+      <div class="card-title">Quick Recommend by Test Index</div>
+      <div class="form-group mb-2">
+        <label>Test Set Index (0-based)</label>
+        <input type="number" id="rec_idx" min="0" value="42"/>
+      </div>
+      <div class="form-group mb-2">
+        <label>K Neighbors</label>
+        <input type="number" id="rec_idx_k" min="1" max="20" value="5"/>
+      </div>
+      <button class="btn btn-primary" onclick="recommendByIndex()">🎯 Get Recommendation</button>
+      <div id="rec-idx-result" class="result-box mt-2"></div>
+      <div id="rec-idx-error" class="error-box"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Recommendation Result</div>
+      <div id="rec-full-result" style="font-size:.8rem;color:var(--muted);margin-top:.5rem;">
+        Use the form below or the index lookup to get a recommendation.
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-2">
+    <div class="card-title">Full Input Recommendation</div>
+    <div class="form-grid">
+      <div class="form-group"><label>Hour</label><input type="number" id="r_hour" min="0" max="23" value="14"/></div>
+      <div class="form-group"><label>Day of Week</label><input type="number" id="r_dow" min="0" max="6" value="2"/></div>
+      <div class="form-group"><label>Month</label><input type="number" id="r_month" min="1" max="12" value="6"/></div>
+      <div class="form-group"><label>Is Weekend</label><select id="r_weekend"><option value="0">No</option><option value="1">Yes</option></select></div>
+      <div class="form-group"><label>Demand Lag 1h (MW)</label><input type="number" id="r_d1" value="28500"/></div>
+      <div class="form-group"><label>Demand Lag 24h (MW)</label><input type="number" id="r_d24" value="29000"/></div>
+      <div class="form-group"><label>Demand Lag 168h (MW)</label><input type="number" id="r_d168" value="27800"/></div>
+      <div class="form-group"><label>Price Lag 1h (EUR/MWh)</label><input type="number" id="r_p1" value="52.3"/></div>
+      <div class="form-group"><label>Price Lag 24h (EUR/MWh)</label><input type="number" id="r_p24" value="48.7"/></div>
+      <div class="form-group"><label>Renewable (MW)</label><input type="number" id="r_ren" value="12000"/></div>
+      <div class="form-group"><label>Fossil (MW)</label><input type="number" id="r_fos" value="14000"/></div>
+      <div class="form-group"><label>Nuclear (MW)</label><input type="number" id="r_nuc" value="6000"/></div>
+      <div class="form-group"><label>Renewable %</label><input type="number" id="r_rpct" value="37.5"/></div>
+      <div class="form-group"><label>Demand Avg 24h</label><input type="number" id="r_davg" value="28200"/></div>
+      <div class="form-group"><label>Price Avg 24h</label><input type="number" id="r_pavg" value="50.1"/></div>
+      <div class="form-group"><label>Wind Forecast (MW)</label><input type="number" id="r_wind" value="5200"/></div>
+      <div class="form-group"><label>Solar Forecast (MW)</label><input type="number" id="r_solar" value="3100"/></div>
+      <div class="form-group"><label>Total Load Forecast</label><input type="number" id="r_load" value="30000"/></div>
+      <div class="form-group"><label>K Neighbors</label><input type="number" id="r_k" min="1" max="20" value="5"/></div>
+    </div>
+    <div style="margin-top:1rem;">
+      <button class="btn btn-primary" onclick="recommendFull()">🎯 Full Recommendation</button>
+    </div>
+    <div id="rec-form-result" class="result-box mt-2"></div>
+    <div id="rec-form-error" class="error-box"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     PAGE: PROFILES
+══════════════════════════════════════════════ -->
+<div id="page-profiles" class="page">
+  <div class="section-header">
+    <div>
+      <div class="section-title">Cluster Profiles</div>
+      <div class="section-sub">Mean demand & price per energy regime cluster</div>
+    </div>
+    <button class="btn btn-secondary" onclick="loadProfiles()">↺ Refresh</button>
+  </div>
+  <div class="card">
+    <div id="profiles-table">
+      <div style="color:var(--muted);font-size:.8rem;">Loading cluster profiles…</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     PAGE: MODELS
+══════════════════════════════════════════════ -->
+<div id="page-models" class="page">
+  <div class="section-header">
+    <div>
+      <div class="section-title">Model Registry</div>
+      <div class="section-sub">Trained model info, features & thresholds</div>
+    </div>
+    <button class="btn btn-secondary" onclick="loadModels()">↺ Refresh</button>
+  </div>
+  <div id="models-content">
+    <div style="color:var(--muted);font-size:.8rem;">Loading model info…</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     PAGE: HISTORY
+══════════════════════════════════════════════ -->
+<div id="page-history" class="page">
+  <div class="section-header">
+    <div>
+      <div class="section-title">Request History</div>
+      <div class="section-sub">All API calls made this session</div>
+    </div>
+    <button class="btn btn-secondary" onclick="clearHistory()">Clear</button>
+  </div>
+  <div class="card">
+    <div id="history-list">
+      <div style="color:var(--muted);font-size:.8rem;">No requests yet.</div>
+    </div>
+  </div>
+</div>
+
+</main>
+
+<script>
+// ──────────────────────────────────────────────
+//  CONFIG — change this if your API URL changes
+// ──────────────────────────────────────────────
+const API_BASE = "http://localhost:8000";
+
+// ──────────────────────────────────────────────
+//  STATE
+// ──────────────────────────────────────────────
+let history_log = [];
+
+// ──────────────────────────────────────────────
+//  TAB SWITCHING
+// ──────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+  document.getElementById('page-' + name).classList.add('active');
+  if (name === 'profiles') loadProfiles();
+  if (name === 'models')   loadModels();
+}
+
+// ──────────────────────────────────────────────
+//  API HEALTH CHECK
+// ──────────────────────────────────────────────
+async function checkHealth() {
+  const dot  = document.getElementById('status-dot');
+  const text = document.getElementById('status-text');
+  try {
+    const r = await fetch(API_BASE + '/health', { signal: AbortSignal.timeout(4000) });
+    if (r.ok) {
+      dot.className = 'online'; text.textContent = 'API Online';
+    } else {
+      dot.className = 'offline'; text.textContent = 'API Error ' + r.status;
+    }
+  } catch {
+    dot.className = 'offline'; text.textContent = 'API Offline';
+  }
+}
+checkHealth();
+setInterval(checkHealth, 15000);
+
+// ──────────────────────────────────────────────
+//  HELPERS
+// ──────────────────────────────────────────────
+function v(id) {
+  const el = document.getElementById(id);
+  const val = el.tagName === 'SELECT' ? el.value : el.value;
+  return parseFloat(val);
+}
+function vi(id) { return parseInt(document.getElementById(id).value); }
+function vs(id) { return document.getElementById(id).value; }
+
+function showResult(id, html) {
+  const el = document.getElementById(id);
+  el.innerHTML = html; el.classList.add('show');
+}
+function showError(id, msg) {
+  const el = document.getElementById(id);
+  el.innerHTML = '⚠ ' + msg; el.classList.add('show');
+}
+function hideError(id) {
+  document.getElementById(id).classList.remove('show');
+}
+function badgeHTML(val) {
+  if (!val) return '';
+  const cls = val.toLowerCase() === 'low' ? 'badge-low' : val.toLowerCase() === 'medium' ? 'badge-medium' : 'badge-high';
+  return `<span class="badge ${cls}">${val}</span>`;
+}
+function row(key, val) {
+  return `<div class="result-row"><span class="result-key">${key}</span><span class="result-val">${val}</span></div>`;
+}
+
+function logHistory(endpoint, status, summary) {
+  history_log.unshift({ time: new Date().toLocaleTimeString(), endpoint, status, summary });
+  if (history_log.length > 50) history_log.pop();
+  renderHistory();
+}
+function renderHistory() {
+  const el = document.getElementById('history-list');
+  if (!history_log.length) { el.innerHTML = '<div style="color:var(--muted);font-size:.8rem;">No requests yet.</div>'; return; }
+  el.innerHTML = history_log.map(h => `
+    <div class="history-item">
+      <span class="history-time">${h.time}</span>
+      <span class="history-badge">${h.status === 'ok' ? '<span style="color:var(--green)">✓</span>' : '<span style="color:var(--red)">✗</span>'}</span>
+      <span style="color:var(--accent);font-size:.7rem;">${h.endpoint}</span>
+      <span style="color:var(--muted);font-size:.7rem;margin-left:auto;">${h.summary}</span>
+    </div>`).join('');
+}
+function clearHistory() { history_log = []; renderHistory(); }
+
+async function apiCall(endpoint, method, body) {
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch(API_BASE + endpoint, opts);
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.detail || JSON.stringify(data));
+  return data;
+}
+
+// ──────────────────────────────────────────────
+//  BUILD INPUT OBJECTS
+// ──────────────────────────────────────────────
+function buildBothInput(prefix) {
+  return {
+    hour: vi(prefix+'hour'), day_of_week: vi(prefix+'dow'),
+    month: vi(prefix+'month'), is_weekend: vi(prefix+'weekend'),
+    demand_lag_1h: v(prefix+'d1'), demand_lag_24h: v(prefix+'d24'),
+    demand_lag_168h: v(prefix+'d168'), price_lag_1h: v(prefix+'p1'),
+    price_lag_24h: v(prefix+'p24'), renewable: v(prefix+'ren'),
+    fossil: v(prefix+'fos'), nuclear: v(prefix+'nuc'),
+    renewable_pct: v(prefix+'rpct'), demand_avg_24h: v(prefix+'davg'),
+    price_avg_24h: v(prefix+'pavg'),
+    "forecast wind onshore day ahead": v(prefix+'wind') || null,
+    "forecast solar day ahead": v(prefix+'solar') || null,
+    "total load forecast": v(prefix+'load') || null,
+  };
+}
+
+// ──────────────────────────────────────────────
+//  PREDICT
+// ──────────────────────────────────────────────
+async function predictBoth() {
+  hideError('predict-error');
+  const btn = document.getElementById('predict-btn-text');
+  btn.innerHTML = '<span class="loader"></span>Forecasting…';
+  document.querySelector('[onclick="predictBoth()"]').disabled = true;
+  try {
+    const body = buildBothInput('p_');
+    const d = await apiCall('/predict/both', 'POST', body);
+    const html = `
+      ${row('Demand 12h Ahead', d.predicted_demand_12h_MW.toFixed(1) + ' MW')}
+      ${row('Price 12h Ahead',  d.predicted_price_12h_EUR.toFixed(2) + ' EUR/MWh')}`;
+    showResult('predict-result', html);
+    renderPredictVisual(d.predicted_demand_12h_MW, d.predicted_price_12h_EUR);
+    logHistory('/predict/both', 'ok', `${d.predicted_demand_12h_MW.toFixed(0)} MW | ${d.predicted_price_12h_EUR.toFixed(1)} EUR`);
+  } catch(e) {
+    showError('predict-error', e.message);
+    logHistory('/predict/both', 'err', e.message.slice(0,40));
+  }
+  btn.innerHTML = '⚡ Run Forecast';
+  document.querySelector('[onclick="predictBoth()"]').disabled = false;
+}
+
+async function predictDemandOnly() {
+  hideError('predict-error');
+  try {
+    const body = buildBothInput('p_');
+    const d = await apiCall('/predict/demand', 'POST', body);
+    showResult('predict-result', row('Demand 12h Ahead', d.predicted_demand_12h_MW.toFixed(1) + ' MW'));
+    logHistory('/predict/demand', 'ok', d.predicted_demand_12h_MW.toFixed(0) + ' MW');
+  } catch(e) { showError('predict-error', e.message); }
+}
+
+async function predictPriceOnly() {
+  hideError('predict-error');
+  try {
+    const body = buildBothInput('p_');
+    body["price day ahead"] = null;
+    const d = await apiCall('/predict/price', 'POST', body);
+    showResult('predict-result', row('Price 12h Ahead', d.predicted_price_12h_EUR.toFixed(2) + ' EUR/MWh'));
+    logHistory('/predict/price', 'ok', d.predicted_price_12h_EUR.toFixed(1) + ' EUR');
+  } catch(e) { showError('predict-error', e.message); }
+}
+
+function renderPredictVisual(demand, price) {
+  const el = document.getElementById('predict-visual');
+  el.innerHTML = `
+    <div style="margin-bottom:1.5rem;">
+      <div style="font-size:.7rem;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:.5rem;">Forecast Values</div>
+      <div style="display:flex;gap:2rem;flex-wrap:wrap;">
+        <div>
+          <div style="font-family:var(--font-head);font-size:2.2rem;font-weight:800;color:var(--accent);line-height:1;">${demand.toFixed(0)}</div>
+          <div style="font-size:.7rem;color:var(--muted);margin-top:4px;">MW demand</div>
+        </div>
+        <div>
+          <div style="font-family:var(--font-head);font-size:2.2rem;font-weight:800;color:#a78bfa;line-height:1;">${price.toFixed(1)}</div>
+          <div style="font-size:.7rem;color:var(--muted);margin-top:4px;">EUR/MWh price</div>
+        </div>
+      </div>
+    </div>
+    <div class="threshold-bar">
+      <div class="tbar-label"><span>Demand Range Indicator</span></div>
+      <div class="tbar-track"></div>
+      <div class="tbar-labels"><span>Low</span><span>Medium</span><span>High</span></div>
+    </div>`;
+}
+
+// ──────────────────────────────────────────────
+//  CLASSIFY
+// ──────────────────────────────────────────────
+async function classifyBoth() {
+  hideError('clf-demand-error'); hideError('clf-price-error');
+  await classifyDemand(); await classifyPrice();
+}
+async function classifyDemand() {
+  hideError('clf-demand-error');
+  try {
+    const body = buildBothInput('c_');
+    const d = await apiCall('/classify/demand', 'POST', body);
+    showResult('clf-demand-result', row('Demand Class', badgeHTML(d.demand_class)) + row('Encoded', d.demand_class_encoded));
+    logHistory('/classify/demand', 'ok', d.demand_class);
+  } catch(e) { showError('clf-demand-error', e.message); }
+}
+async function classifyPrice() {
+  hideError('clf-price-error');
+  try {
+    const body = buildBothInput('c_');
+    const d = await apiCall('/classify/price', 'POST', body);
+    showResult('clf-price-result', row('Price Class', badgeHTML(d.price_class)) + row('Encoded', d.price_class_encoded));
+    logHistory('/classify/price', 'ok', d.price_class);
+  } catch(e) { showError('clf-price-error', e.message); }
+}
+
+// ──────────────────────────────────────────────
+//  CLUSTER
+// ──────────────────────────────────────────────
+async function runCluster() {
+  hideError('cluster-error');
+  try {
+    const body = buildBothInput('cl_');
+    const d = await apiCall('/cluster', 'POST', body);
+    const html = row('Cluster ID', `<span class="cluster-id">${d.cluster_id}</span>`) +
+                 row('Total Clusters', d.n_clusters) +
+                 `<div style="margin-top:.75rem;font-size:.75rem;color:var(--muted);">${d.note}</div>`;
+    showResult('cluster-result', html);
+    logHistory('/cluster', 'ok', 'Cluster ' + d.cluster_id + ' of ' + d.n_clusters);
+  } catch(e) { showError('cluster-error', e.message); }
+}
+
+// ──────────────────────────────────────────────
+//  RECOMMEND
+// ──────────────────────────────────────────────
+async function recommendByIndex() {
+  hideError('rec-idx-error');
+  const idx = vi('rec_idx');
+  const k   = vi('rec_idx_k');
+  try {
+    const d = await apiCall(`/recommend/by_index/${idx}?k=${k}`, 'GET');
+    renderRecommendResult('rec-idx-result', d, 'rec-full-result');
+    logHistory('/recommend/by_index', 'ok', d.recommendation.slice(0,40));
+  } catch(e) { showError('rec-idx-error', e.message); }
+}
+
+async function recommendFull() {
+  hideError('rec-form-error');
+  try {
+    const k = vi('r_k');
+    const body = {
+      hour: vi('r_hour'), day_of_week: vi('r_dow'), month: vi('r_month'),
+      is_weekend: vi('r_weekend'), demand_lag_1h: v('r_d1'), demand_lag_24h: v('r_d24'),
+      demand_lag_168h: v('r_d168'), price_lag_1h: v('r_p1'), price_lag_24h: v('r_p24'),
+      renewable: v('r_ren'), fossil: v('r_fos'), nuclear: v('r_nuc'),
+      renewable_pct: v('r_rpct'), demand_avg_24h: v('r_davg'), price_avg_24h: v('r_pavg'),
+      "forecast wind onshore day ahead": v('r_wind') || null,
+      "forecast solar day ahead": v('r_solar') || null,
+      "total load forecast": v('r_load') || null,
+    };
+    const d = await apiCall(`/recommend?k=${k}`, 'POST', body);
+    renderRecommendResult('rec-form-result', d, 'rec-full-result');
+    logHistory('/recommend', 'ok', d.recommendation.slice(0,40));
+  } catch(e) { showError('rec-form-error', e.message); }
+}
+
+function renderRecommendResult(resultId, d, summaryId) {
+  const simChips = (d.similar_hours || []).slice(0,5).map(t => `<span class="sim-chip">${t}</span>`).join('');
+  const html =
+    row('Demand Forecast', (d.predicted_demand_12h_MW || '—') + ' MW') +
+    row('Price Forecast',  (d.predicted_price_12h_EUR  || '—') + ' EUR/MWh') +
+    row('Demand Class',    badgeHTML(d.demand_class)) +
+    row('Price Class',     badgeHTML(d.price_class)) +
+    row('Cluster',         `<span class="cluster-id">${d.cluster}</span>`) +
+    row('Confidence',      d.confidence !== undefined ? (d.confidence * 100).toFixed(0) + '%' : '—') +
+    (d.similar_hours ? `<div style="margin-top:.75rem;"><div style="font-size:.65rem;color:var(--muted);margin-bottom:4px;">SIMILAR HOURS</div>${simChips}</div>` : '') +
+    `<div class="rec-box"><div class="rec-label">Grid Recommendation</div><div class="rec-text">${d.recommendation}</div></div>`;
+  showResult(resultId, html);
+
+  // update the summary card too
+  document.getElementById(summaryId).innerHTML = `
+    <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1rem;">
+      ${badgeHTML(d.demand_class)} ${badgeHTML(d.price_class)}
+    </div>
+    <div class="rec-box"><div class="rec-label">Grid Recommendation</div><div class="rec-text">${d.recommendation}</div></div>
+    <div style="margin-top:1rem;font-size:.7rem;color:var(--muted);">Confidence: ${d.confidence !== undefined ? (d.confidence*100).toFixed(0)+'%' : '—'} | Cluster: ${d.cluster}</div>`;
+}
+
+// ──────────────────────────────────────────────
+//  PROFILES
+// ──────────────────────────────────────────────
+async function loadProfiles() {
+  const el = document.getElementById('profiles-table');
+  el.innerHTML = '<div style="color:var(--muted);font-size:.8rem;"><span class="loader"></span>Loading…</div>';
+  try {
+    const d = await apiCall('/clusters/profiles', 'GET');
+    const clusters = Object.keys(d).sort((a,b) => +a - +b);
+    if (!clusters.length) { el.innerHTML = '<div style="color:var(--muted);font-size:.8rem;">No profile data.</div>'; return; }
+    const firstKey = clusters[0];
+    const cols = Object.keys(d[firstKey]).filter(c => c !== 'cluster');
+    const formatCol = s => s.replace(/_/g,' ').replace(/\b\w/g, l => l.toUpperCase());
+    let html = `<table><thead><tr><th>Cluster</th>${cols.map(c=>`<th>${formatCol(c)}</th>`).join('')}</tr></thead><tbody>`;
+    clusters.forEach(clId => {
+      html += `<tr><td><span class="cluster-id">${clId}</span></td>`;
+      cols.forEach(c => { html += `<td>${d[clId][c] !== undefined ? d[clId][c] : '—'}</td>`; });
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    el.innerHTML = html;
+    logHistory('/clusters/profiles', 'ok', clusters.length + ' clusters loaded');
+  } catch(e) {
+    el.innerHTML = `<div class="error-box show">⚠ ${e.message}</div>`;
+  }
+}
+
+// ──────────────────────────────────────────────
+//  MODELS
+// ──────────────────────────────────────────────
+async function loadModels() {
+  const el = document.getElementById('models-content');
+  el.innerHTML = '<div style="color:var(--muted);font-size:.8rem;"><span class="loader"></span>Loading…</div>';
+  try {
+    const d = await apiCall('/models/compare', 'GET');
+    const th = d.thresholds || {};
+    el.innerHTML = `
+      <div class="grid-4 mb-2">
+        <div class="card">
+          <div class="card-title">Demand Regressor</div>
+          <div class="stat-value" style="font-size:1.1rem;">${d.regression_model_demand}</div>
+          <div class="stat-label">${d.demand_features_count} features</div>
+        </div>
+        <div class="card">
+          <div class="card-title">Price Regressor</div>
+          <div class="stat-value" style="font-size:1.1rem;">${d.regression_model_price}</div>
+          <div class="stat-label">${d.price_features_count} features</div>
+        </div>
+        <div class="card">
+          <div class="card-title">Demand Classifier</div>
+          <div class="stat-value" style="font-size:1.1rem;">${d.classifier_demand}</div>
+          <div class="stat-label">Low / Med / High</div>
+        </div>
+        <div class="card">
+          <div class="card-title">Price Classifier</div>
+          <div class="stat-value" style="font-size:1.1rem;">${d.classifier_price}</div>
+          <div class="stat-label">Low / Med / High</div>
+        </div>
+      </div>
+      <div class="grid-2 mb-2">
+        <div class="card">
+          <div class="card-title">Clustering Model</div>
+          <div class="stat-value" style="font-size:1.1rem;">${d.clustering_model}</div>
+          <div class="stat-label">${d.n_clusters} clusters</div>
+        </div>
+        <div class="card">
+          <div class="card-title">Decision Thresholds</div>
+          <div style="font-size:.8rem;margin-top:.5rem;">
+            ${row('Demand Low below', th.demand_low_below_MW + ' MW')}
+            ${row('Demand High above', th.demand_high_above_MW + ' MW')}
+            ${row('Price Low below', th.price_low_below_EUR + ' EUR/MWh')}
+            ${row('Price High above', th.price_high_above_EUR + ' EUR/MWh')}
+          </div>
+        </div>
+      </div>
+      <div class="card mb-2">
+        <div class="card-title">Demand Features (${d.demand_features_count})</div>
+        <div style="margin-top:.5rem;">${(d.demand_features||[]).map(f=>`<span class="model-chip"><span>${f}</span></span>`).join('')}</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Price Features (${d.price_features_count})</div>
+        <div style="margin-top:.5rem;">${(d.price_features||[]).map(f=>`<span class="model-chip"><span>${f}</span></span>`).join('')}</div>
+      </div>`;
+    logHistory('/models/compare', 'ok', '5 models loaded');
+  } catch(e) {
+    el.innerHTML = `<div class="error-box show">⚠ ${e.message}</div>`;
+  }
+}
+
+// ──────────────────────────────────────────────
+//  DEMO VALUES (same realistic values everywhere)
+// ──────────────────────────────────────────────
+function fillDemo(page) {
+  const demo = {
+    hour: 14, dow: 2, month: 6, weekend: 0,
+    d1: 28500, d24: 29000, d168: 27800,
+    p1: 52.3, p24: 48.7,
+    ren: 12000, fos: 14000, nuc: 6000, rpct: 37.5,
+    davg: 28200, pavg: 50.1,
+    wind: 5200, solar: 3100, load: 30000,
+  };
+  const prefixes = { predict: 'p_', classify: 'c_', cluster: 'cl_', recommend: 'r_' };
+  const px = prefixes[page] || 'p_';
+  Object.entries(demo).forEach(([k, v]) => {
+    const el = document.getElementById(px + k);
+    if (el) el.value = v;
+  });
+}
+
+// Auto-load on pages that display data
+window.addEventListener('DOMContentLoaded', () => {});
+</script>
+</body>
+</html>
