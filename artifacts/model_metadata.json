@@ -1,0 +1,42 @@
+{
+  "regressors": {
+    "rf": "artifacts\\reg_rf.pkl",
+    "xgb": "artifacts\\reg_xgb.pkl"
+  },
+  "classifiers": {
+    "rf": "artifacts\\clf_rf.pkl",
+    "xgb": "artifacts\\clf_xgb.pkl"
+  },
+  "features": [
+    "generation biomass",
+    "generation fossil brown coal/lignite",
+    "generation fossil coal-derived gas",
+    "generation fossil gas",
+    "generation fossil hard coal",
+    "generation fossil oil",
+    "generation fossil oil shale",
+    "generation fossil peat",
+    "generation geothermal",
+    "generation hydro pumped storage aggregated",
+    "generation hydro pumped storage consumption",
+    "generation hydro run-of-river and poundage",
+    "generation hydro water reservoir",
+    "generation marine",
+    "generation nuclear",
+    "generation other",
+    "generation other renewable",
+    "generation solar",
+    "generation waste",
+    "generation wind offshore",
+    "generation wind onshore",
+    "forecast solar day ahead",
+    "forecast wind offshore eday ahead",
+    "forecast wind onshore day ahead",
+    "total load forecast",
+    "total load actual"
+  ],
+  "cluster_profiles": {
+    "profiles_path": "artifacts\\cluster_profiles.csv",
+    "artifact_pkl": "artifacts\\cluster_artifacts.pkl"
+  }
+}
