@@ -30,6 +30,8 @@ import numpy as np
 import pandas as pd
 import pickle
 import os
+import re
+import ast
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.preprocessing import normalize
 
@@ -82,6 +84,48 @@ inv_map         = load('inv_map.pkl')
 REC_TABLE       = load('rec_table.pkl')
 thresholds      = load('thresholds.pkl')
 print("All artifacts loaded.")
+
+# Load and sanitise association rules (if CSV artifact exists)
+assoc_rules = None
+def _sanitize_assoc_df(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or len(df) == 0:
+        return df
+    def _safe_parse(x):
+        if x is None or (isinstance(x, float) and pd.isna(x)):
+            return []
+        if isinstance(x, (list, tuple, set)):
+            return sorted([str(v).strip() for v in list(x) if str(v).strip()])
+        if isinstance(x, str):
+            s = x.strip()
+            try:
+                if s.startswith(('[', '(', '{')):
+                    val = ast.literal_eval(s)
+                    if isinstance(val, (list, tuple, set)):
+                        return sorted([str(v).strip() for v in val if str(v).strip()])
+            except Exception:
+                pass
+            s = s.replace('\n', ',').replace('|', ',')
+            s = re.sub(r"^[\[\(\{\]\)\}\s\'\"]+|[\[\(\{\]\)\}\s\'\"]+$", '', s)
+            parts = [p.strip() for p in re.split(r'[;,\\/]|,', s) if p and p.strip()]
+            return sorted(list(dict.fromkeys(parts)))
+        return [str(x)]
+
+    try:
+        if 'antecedents' in df.columns:
+            df['antecedents'] = df['antecedents'].apply(_safe_parse)
+        if 'consequents' in df.columns:
+            df['consequents'] = df['consequents'].apply(_safe_parse)
+    except Exception:
+        pass
+    return df
+
+csv_path = os.path.join(ARTIFACTS, 'association_rules.csv')
+if os.path.exists(csv_path):
+    try:
+        assoc_rules = pd.read_csv(csv_path)
+        assoc_rules = _sanitize_assoc_df(assoc_rules)
+    except Exception:
+        assoc_rules = None
 
 
 # ============================================================
@@ -164,6 +208,13 @@ class BothInput(BaseModel):
 
     class Config:
         populate_by_name = True
+
+
+class AssociationQuery(BaseModel):
+    demand_level: Optional[str] = Field(None, description="LOW, MED, or HIGH")
+    price_level: Optional[str] = Field(None, description="LOW, MED, or HIGH")
+    renewable_level: Optional[str] = Field(None, description="LOW, MED, or HIGH")
+    top_n: int = Field(5, ge=1, le=50)
 
 
 # ============================================================
@@ -423,7 +474,13 @@ def cluster_profiles():
     cols  = ['demand_class_enc', 'price_class_enc', 'cluster',
              'pred_demand', 'pred_price', 'renewable_pct']
     avail = [c for c in cols if c in profile_df.columns]
-    prof  = profile_df[avail + ['cluster']].groupby('cluster').mean().round(2)
+    # Ensure 'cluster' appears only once in the selection to avoid
+    # pandas grouping errors when duplicate column names are present.
+    if 'cluster' not in avail:
+        sel = avail + ['cluster']
+    else:
+        sel = avail
+    prof  = profile_df[sel].groupby('cluster').mean().round(2)
     return prof.to_dict(orient='index')
 
 
@@ -497,6 +554,78 @@ def recommend_by_index(idx: int, k: int = 5):
     }
 
 
+# -------------------- Association rules (from artifacts) --------------------
+@app.get("/associations/top", tags=["Association Rules"])
+def get_top_associations(n: int = 10):
+    try:
+        if assoc_rules is None or len(assoc_rules) == 0:
+            # fallback: try reading CSV on demand
+            csv_path = os.path.join(ARTIFACTS, 'association_rules.csv')
+            if not os.path.exists(csv_path):
+                raise HTTPException(status_code=404, detail="Association rules not available. Run association mining.")
+            df = pd.read_csv(csv_path)
+            df = _sanitize_assoc_df(df)
+        else:
+            df = assoc_rules
+        top = df.head(n).copy()
+        # Ensure numeric types
+        for c in ['support', 'confidence', 'lift']:
+            if c in top.columns:
+                try:
+                    top[c] = top[c].astype(float)
+                except Exception:
+                    pass
+        return top[['antecedents','consequents','support','confidence','lift']].to_dict(orient='records')
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"associations/top error: {e}")
+
+
+@app.post("/associations/query", tags=["Association Rules"])
+def query_associations(query: AssociationQuery):
+    try:
+        from src.association_rules_endpoint import query_rules
+        if assoc_rules is None or len(assoc_rules) == 0:
+            csv_path = os.path.join(ARTIFACTS, 'association_rules.csv')
+            if not os.path.exists(csv_path):
+                raise HTTPException(status_code=404, detail="Association rules not available. Run association mining.")
+            df = pd.read_csv(csv_path)
+            df = _sanitize_assoc_df(df)
+        else:
+            df = assoc_rules
+        results = query_rules(df, demand_level=query.demand_level, price_level=query.price_level, renewable_level=query.renewable_level, top_n=query.top_n)
+        return {'query': query.dict(), 'rules_found': len(results), 'rules': results}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get('/associations/debug', tags=["Association Rules"])
+def associations_debug():
+    """Return basic diagnostics about the association_rules.csv file for debugging."""
+    csv_path = os.path.join(ARTIFACTS, 'association_rules.csv')
+    if not os.path.exists(csv_path) and (assoc_rules is None or len(assoc_rules) == 0):
+        raise HTTPException(status_code=404, detail='association_rules.csv missing')
+    info = {}
+    try:
+        if assoc_rules is not None and len(assoc_rules) > 0:
+            df = assoc_rules
+        else:
+            df = pd.read_csv(csv_path)
+        info['rows'] = int(len(df))
+        info['columns'] = df.columns.tolist()
+        first = df.iloc[0].to_dict()
+        sample = {}
+        for k, v in first.items():
+            sample[k] = {'repr': str(v)[:300], 'type': type(v).__name__}
+        info['first_row_sample'] = sample
+    except Exception as e:
+        info['error'] = str(e)
+    return info
+
+
 # ============================================================
 # MODEL INFO ENDPOINT
 # ============================================================
@@ -525,6 +654,43 @@ def model_comparison():
             "price_low_below_EUR"    : round(thresholds['p33'], 2),
             "price_high_above_EUR"   : round(thresholds['p66'], 2),
         },
+    }
+
+
+@app.get("/models/compare_metrics", tags=["Info"])
+def model_comparison_metrics():
+    """Return per-model performance metrics read from artifacts/model_comparison.csv."""
+    csv_path = os.path.join(ARTIFACTS, 'model_comparison.csv')
+    if not os.path.exists(csv_path):
+        raise HTTPException(status_code=404, detail="model_comparison.csv not found in artifacts")
+    df = pd.read_csv(csv_path)
+    # Convert to dict: { model_name: {metric: value, ...}, ... }
+    out = {}
+    for _, row in df.iterrows():
+        out[row['Model']] = {
+            'demand_r2': float(row.get('Demand R2', 0)),
+            'demand_nmae': float(row.get('Demand NMAE', 0)),
+            'price_r2': float(row.get('Price R2', 0)),
+            'price_nmae': float(row.get('Price NMAE', 0)),
+            'avg_r2': float(row.get('Avg R2', 0)),
+        }
+    return out
+
+
+@app.get("/recommend", tags=["Info"])
+def recommend_best_model():
+    """Return the best model based on Avg R2 from model_comparison.csv."""
+    csv_path = os.path.join(ARTIFACTS, 'model_comparison.csv')
+    if not os.path.exists(csv_path):
+        raise HTTPException(status_code=404, detail="model_comparison.csv not found in artifacts")
+    df = pd.read_csv(csv_path)
+    if df.empty:
+        raise HTTPException(status_code=404, detail="No model comparison data available")
+    best = df.loc[df['Avg R2'].idxmax()]
+    return {
+        'best_model': best['Model'],
+        'best_score': float(best['Avg R2']),
+        'reason': 'Highest Avg R2 across demand and price'
     }
 
 

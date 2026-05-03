@@ -27,6 +27,8 @@ from pydantic import BaseModel, Field
 from typing import Optional, List
 import numpy as np
 import pandas as pd
+import re
+import ast
 import pickle
 import os
 from sklearn.metrics.pairwise import cosine_similarity
@@ -78,6 +80,50 @@ REC_TABLE       = load('rec_table.pkl')
 thresholds      = load('thresholds.pkl')
 assoc_rules     = load_optional('association_rules.pkl', pd.DataFrame())
 print("All artifacts loaded.")
+
+# Clean up association rules in-memory so endpoints always return lists
+def _sanitize_assoc_df(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or len(df) == 0:
+        return df
+    def _safe_parse(x):
+        if x is None or (isinstance(x, float) and pd.isna(x)):
+            return []
+        if isinstance(x, (list, tuple, set)):
+            return sorted([str(v).strip() for v in list(x) if str(v).strip()])
+        if isinstance(x, str):
+            s = x.strip()
+            try:
+                if s.startswith(('[', '(', '{')):
+                    val = ast.literal_eval(s)
+                    if isinstance(val, (list, tuple, set)):
+                        return sorted([str(v).strip() for v in val if str(v).strip()])
+            except Exception:
+                pass
+            s = s.replace('\n', ',').replace('|', ',')
+            s = re.sub(r"^[\[\(\{\]\)\}\s\'\"]+|[\[\(\{\]\)\}\s\'\"]+$", '', s)
+            parts = [p.strip() for p in re.split(r'[;,\\/]|,', s) if p and p.strip()]
+            return sorted(list(dict.fromkeys(parts)))
+        return [str(x)]
+
+    try:
+        if 'antecedents' in df.columns:
+            df['antecedents'] = df['antecedents'].apply(_safe_parse)
+        if 'consequents' in df.columns:
+            df['consequents'] = df['consequents'].apply(_safe_parse)
+    except Exception:
+        pass
+    return df
+
+assoc_rules = _sanitize_assoc_df(assoc_rules)
+# If a CSV artifact exists, prefer that (it's human-editable) and sanitize it
+csv_path = os.path.join(ARTIFACTS, 'association_rules.csv')
+if os.path.exists(csv_path):
+    try:
+        csv_df = pd.read_csv(csv_path)
+        csv_df = _sanitize_assoc_df(csv_df)
+        assoc_rules = csv_df
+    except Exception:
+        pass
 
 # ============================================================
 # PYDANTIC MODELS
@@ -497,10 +543,58 @@ def get_top_associations(n: int = 10):
     """Return top N association rules by lift."""
     if assoc_rules is None or len(assoc_rules) == 0:
         raise HTTPException(status_code=404, detail="Association rules are not available. Run src/association_rules_mining.py first.")
+    def _sanitize_item(x):
+        # Handle missing
+        if x is None or (isinstance(x, float) and pd.isna(x)):
+            return []
+        # If already list/tuple/set
+        if isinstance(x, (list, tuple, set)):
+            return sorted([str(v).strip() for v in list(x) if str(v).strip()])
+        # If string, try safe ast literal eval for obvious list-like strings
+        if isinstance(x, str):
+            s = x.strip()
+            # Try literal_eval only when it looks like a Python container
+            if s.startswith(('[', '(', '{')):
+                try:
+                    val = ast.literal_eval(s)
+                    if isinstance(val, (list, tuple, set)):
+                        return sorted([str(v).strip() for v in val if str(v).strip()])
+                except Exception:
+                    pass
+            # Normalize newlines and pipes to commas, remove surrounding brackets/quotes
+            s = s.replace('\n', ',').replace('|', ',')
+            s = re.sub(r"^[\[\(\{\]\)\}\s\'\"]+|[\[\(\{\]\)\}\s\'\"]+$", '', s)
+            parts = [p.strip() for p in re.split(r'[;,\\/]|,', s) if p and p.strip()]
+            return sorted(list(dict.fromkeys(parts)))
+        # Fallback: stringify
+        return [str(x)]
+
     top = assoc_rules.head(n).copy()
-    top['antecedents'] = top['antecedents'].apply(lambda x: sorted(list(x)))
-    top['consequents'] = top['consequents'].apply(lambda x: sorted(list(x)))
+    top['antecedents'] = top['antecedents'].apply(_sanitize_item)
+    top['consequents'] = top['consequents'].apply(_sanitize_item)
+    # Ensure numeric types for metrics
+    top['support'] = top['support'].astype(float)
+    top['confidence'] = top['confidence'].astype(float)
+    top['lift'] = top['lift'].astype(float)
     return top[['antecedents', 'consequents', 'support', 'confidence', 'lift']].to_dict(orient='records')
+
+
+@app.get('/associations/debug', tags=["Association Rules"])
+def associations_debug():
+    if assoc_rules is None or len(assoc_rules) == 0:
+        raise HTTPException(status_code=404, detail="Association rules are not available.")
+    first = assoc_rules.iloc[0].to_dict()
+    sample = {}
+    for k, v in first.items():
+        sample[k] = {
+            'repr': str(v)[:300],
+            'type': type(v).__name__
+        }
+    return {
+        'rows': len(assoc_rules),
+        'columns': assoc_rules.columns.tolist(),
+        'first_row_sample': sample
+    }
 
 
 # ============================================================
