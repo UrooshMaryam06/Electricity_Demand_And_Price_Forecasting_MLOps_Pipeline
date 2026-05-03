@@ -2,11 +2,13 @@
 Association rules: display top rules from the Apriori mining module.
 Includes filterable table, scatter chart, and contextual query.
 """
+from pathlib import Path
+
 import streamlit as st
 import pandas as pd
 st.set_page_config(page_title="Association Rules", layout="wide")
 
-with open("assets/style.css") as f:
+with open(Path(__file__).resolve().parents[1] / "assets" / "style.css") as f:
     st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
 from components.sidebar import render_sidebar

@@ -1,10 +1,40 @@
 version: '3.8'
 services:
   api:
-    build: .
+    build:
+      context: .
+      dockerfile: app-api/Dockerfile
     container_name: energy_forecast_api
     ports:
       - "8000:8000"
     volumes:
       - ./artifacts:/app/artifacts
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: app-frontend/Dockerfile
+    container_name: energy_forecast_frontend
+    ports:
+      - "8501:8501"
+    environment:
+      API_BASE_URL: http://api:8000
+    volumes:
+      - ./artifacts:/app/artifacts
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  monitoring:
+    build:
+      context: .
+      dockerfile: app-monitoring/Dockerfile
+    container_name: energy_forecast_monitoring
+    ports:
+      - "8502:8502"
+    volumes:
+      - ./artifacts:/app/artifacts
+    depends_on:
+      - api
     restart: unless-stopped

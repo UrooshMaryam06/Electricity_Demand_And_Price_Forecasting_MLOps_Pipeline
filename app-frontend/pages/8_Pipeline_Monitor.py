@@ -1,14 +1,16 @@
 """
 Pipeline monitor: shows Prefect flow run history.
-If the Prefect API is not running, displays the last known run from a local log.
+If the Prefect API is not running, displays the last known run from local logs.
 """
-import streamlit as st
-import requests
-import pandas as pd
+import json
 from pathlib import Path
+
+import pandas as pd
+import requests
+import streamlit as st
 st.set_page_config(page_title="Pipeline Monitor", layout="wide")
 
-with open("assets/style.css") as f:
+with open(Path(__file__).resolve().parents[1] / "assets" / "style.css") as f:
     st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
 from components.sidebar import render_sidebar
@@ -23,23 +25,37 @@ PREFECT_API = "http://localhost:4200/api"
 
 
 def load_local_pipeline_snapshot() -> dict:
-    """Load last-known pipeline metadata when Prefect API is unavailable."""
+    """Load last-known pipeline metadata and experiment logs when Prefect API is unavailable."""
     meta_path = Path("../artifacts/model_metadata.json")
+    exp_path = Path("../artifacts/experiment_log.json")
     if not meta_path.exists():
-        return {
+        snapshot = {
             "available": False,
             "message": "No local pipeline metadata found yet.",
         }
+        if exp_path.exists():
+            try:
+                with open(exp_path, "r", encoding="utf8") as f:
+                    snapshot["experiment_log"] = json.load(f)
+                snapshot["available"] = True
+                snapshot["message"] = "Loaded experiment_log.json"
+            except Exception as e:
+                snapshot["experiment_error"] = str(e)
+        return snapshot
 
     try:
-        import json
         with open(meta_path, "r", encoding="utf8") as f:
             meta = json.load(f)
+        exp_log = None
+        if exp_path.exists():
+            with open(exp_path, "r", encoding="utf8") as f:
+                exp_log = json.load(f)
         return {
             "available": True,
             "message": "Loaded from artifacts/model_metadata.json",
             "updated": pd.to_datetime(meta_path.stat().st_mtime, unit="s"),
             "metadata": meta,
+            "experiment_log": exp_log,
         }
     except Exception as e:
         return {
@@ -84,6 +100,30 @@ if isinstance(flow_runs, dict) and flow_runs.get("flow_runs") is None:
             st.caption(f"Last metadata update: {updated}")
         meta = local_snapshot.get("metadata", {})
         st.json(meta)
+
+        exp_log = local_snapshot.get("experiment_log")
+        if exp_log:
+            st.markdown("### Experiment Log")
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Best Demand Model", exp_log.get("best_models", {}).get("demand", {}).get("model", "N/A"))
+            c2.metric("Best Price Model", exp_log.get("best_models", {}).get("price", {}).get("model", "N/A"))
+            c3.metric("Chosen Clusters", str(exp_log.get("clustering", {}).get("chosen_k", "N/A")))
+
+            observations = exp_log.get("observations", {})
+            st.markdown("#### Observations")
+            st.write("Best-performing model:", observations.get("best_performing_model", "N/A"))
+            st.write("Data quality issues:")
+            st.write(observations.get("data_quality_issues", []))
+            st.write("Overfitting / underfitting patterns:")
+            st.write(observations.get("overfitting_patterns", []))
+            st.write("Deployment speed:", observations.get("deployment_speed", "N/A"))
+            st.write("Prefect reliability:", observations.get("prefect_reliability", "N/A"))
+
+            md_path = Path("../artifacts/experiment_log.md")
+            if md_path.exists():
+                with open(md_path, "r", encoding="utf8") as f:
+                    st.markdown("#### Experiment Log Notes")
+                    st.markdown(f.read())
     else:
         st.caption(local_snapshot.get("message", ""))
 

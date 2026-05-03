@@ -2,11 +2,14 @@
 Model comparison: all 8 trained models benchmarked side by side.
 Includes bar chart, radar chart, and metrics table.
 """
+import json
+from pathlib import Path
+
 import streamlit as st
 import pandas as pd
 st.set_page_config(page_title="Model Comparison", layout="wide")
 
-with open("assets/style.css") as f:
+with open(Path(__file__).resolve().parents[1] / "assets" / "style.css") as f:
     st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
 from components.sidebar import render_sidebar
@@ -106,3 +109,31 @@ fig = radar_chart(
     values_matrix=values_matrix,
 )
 st.plotly_chart(fig, use_container_width=True)
+
+st.divider()
+st.markdown("### Experiment Log Summary")
+log_path = Path("../artifacts/experiment_log.json")
+if log_path.exists():
+    try:
+        with open(log_path, "r", encoding="utf8") as f:
+            exp_log = json.load(f)
+
+        left, right = st.columns(2)
+        with left:
+            st.markdown("**Best Models**")
+            st.write("Demand:", exp_log.get("best_models", {}).get("demand", {}).get("model", "N/A"))
+            st.write("Price:", exp_log.get("best_models", {}).get("price", {}).get("model", "N/A"))
+        with right:
+            st.markdown("**Deployment / Reliability Notes**")
+            obs = exp_log.get("observations", {})
+            st.write(obs.get("deployment_speed", "N/A"))
+            st.write(obs.get("prefect_reliability", "N/A"))
+
+        st.markdown("**Data Quality Issues**")
+        st.write(exp_log.get("observations", {}).get("data_quality_issues", []))
+        st.markdown("**Overfitting / Underfitting Patterns**")
+        st.write(exp_log.get("observations", {}).get("overfitting_patterns", []))
+    except Exception as e:
+        st.warning(f"Could not read experiment log: {e}")
+else:
+    st.info("Run the notebook save/log cell first to create artifacts/experiment_log.json.")

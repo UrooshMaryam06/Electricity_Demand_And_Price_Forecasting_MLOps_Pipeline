@@ -11,6 +11,8 @@ Tabs:
 from __future__ import annotations
 
 import datetime
+from pathlib import Path
+
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -31,7 +33,7 @@ from utils.config import COLORS
 
 st.set_page_config(page_title="ML Dashboard", layout="wide")
 
-with open("assets/style.css", encoding="utf8") as f:
+with open(Path(__file__).resolve().parents[1] / "assets" / "style.css", encoding="utf8") as f:
     st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
 render_sidebar()

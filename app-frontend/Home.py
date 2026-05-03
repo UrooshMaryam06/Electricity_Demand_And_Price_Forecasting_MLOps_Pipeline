@@ -7,6 +7,9 @@ dashboard remains available at `ML_Dashboard`.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from datetime import datetime
 
 import streamlit as st
@@ -17,13 +20,16 @@ from services.api_client import get_health, get_model_registry, get_recommendati
 from utils.config import API_BASE_URL, COLORS
 
 
+ARTIFACT_DIR = Path(__file__).resolve().parents[1] / "artifacts"
+
+
 st.set_page_config(
 		page_title="Overview",
 		layout="wide",
 		initial_sidebar_state="expanded",
 )
 
-with open("assets/style.css", encoding="utf8") as f:
+with open(Path(__file__).resolve().parent / "assets" / "style.css", encoding="utf8") as f:
 		st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
 st.markdown(
@@ -103,6 +109,58 @@ st.markdown(
 )
 
 render_sidebar()
+
+home_view = st.sidebar.radio("Home view", ["Overview", "Experiment Logs"], index=0)
+
+if home_view == "Experiment Logs":
+	st.markdown(
+		"""
+		<div class="overview-hero">
+			<div class="overview-kicker">Electricity Demand & Price Forecasting</div>
+			<h1 class="overview-title">Experiment Logs</h1>
+			<div class="overview-subtitle">
+				This view shows the model metrics and observations logged from the training notebook.
+			</div>
+		</div>
+		""",
+		unsafe_allow_html=True,
+	)
+
+	log_json = ARTIFACT_DIR / "experiment_log.json"
+	log_csv = ARTIFACT_DIR / "experiment_log.csv"
+	log_models = ARTIFACT_DIR / "experiment_models.csv"
+	log_md = ARTIFACT_DIR / "experiment_log.md"
+
+	if log_json.exists():
+		with open(log_json, "r", encoding="utf8") as f:
+			exp_log = json.load(f)
+
+		c1, c2, c3, c4 = st.columns(4)
+		c1.metric("Best Demand Model", exp_log.get("best_models", {}).get("demand", {}).get("model", "N/A"))
+		c2.metric("Best Price Model", exp_log.get("best_models", {}).get("price", {}).get("model", "N/A"))
+		c3.metric("Chosen k", str(exp_log.get("clustering", {}).get("chosen_k", "N/A")))
+		c4.metric("Logged Models", str(len(exp_log.get("all_trained_models", []))))
+
+		st.markdown("### All Trained Models")
+		if log_models.exists():
+			st.dataframe(pd.read_csv(log_models), use_container_width=True, hide_index=True)
+		else:
+			st.dataframe(pd.DataFrame(exp_log.get("all_trained_models", [])), use_container_width=True, hide_index=True)
+
+		st.markdown("### Experiment Summary")
+		if log_csv.exists():
+			st.dataframe(pd.read_csv(log_csv), use_container_width=True, hide_index=True)
+
+		st.markdown("### Observations")
+		st.write(exp_log.get("observations", {}))
+
+		if log_md.exists():
+			st.markdown("### Experiment Notes")
+			st.markdown(log_md.read_text(encoding="utf8"))
+	else:
+		st.warning("experiment_log.json is not available yet. Run the notebook log cell first.")
+
+	st.stop()
 
 health = get_health()
 registry = get_model_registry()

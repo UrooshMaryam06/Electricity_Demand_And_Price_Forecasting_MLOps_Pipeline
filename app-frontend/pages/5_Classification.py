@@ -2,10 +2,12 @@
 Classification page: classify demand and price level from a feature vector.
 Shows the standalone classifier output (NOT regression → threshold conversion).
 """
+from pathlib import Path
+
 import streamlit as st
 st.set_page_config(page_title="Classification", layout="wide")
 
-with open("assets/style.css") as f:
+with open(Path(__file__).resolve().parents[1] / "assets" / "style.css") as f:
     st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
 from components.sidebar import render_sidebar
@@ -17,52 +19,21 @@ st.markdown("## Classification — Demand & Price Regimes")
 st.caption("Classifies current energy conditions into LOW / MED / HIGH categories.")
 st.divider()
 
-# ── Feature inputs ────────────────────────────────────────────────────────────
+# ── INPUT SECTION (replaced) ──────────────────────────────────────────────────
+from components.raw_input_form import render_raw_input_form
+from services.feature_engineering import build_all_features
+
 with st.expander("Input Features", expanded=True):
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        hour    = st.slider("Hour", 0, 23, st.session_state.get("selected_hour", 12))
-        month   = st.slider("Month", 1, 12, 6)
-        weekend = st.checkbox("Weekend")
-    with c2:
-        solar   = st.number_input("Solar (MW)",    0.0, 10000.0, 3000.0)
-        wind    = st.number_input("Wind (MW)",     0.0, 20000.0, 8000.0)
-        gas     = st.number_input("Gas (MW)",      0.0, 15000.0, 5000.0)
-    with c3:
-        demand_lag_1h  = st.number_input("Lag demand 1h", 0.0, 50000.0, 28000.0)
-        demand_lag_24h = st.number_input("Lag demand 24h",0.0, 50000.0, 27500.0)
-        demand_lag_168h = st.number_input("Lag demand 168h",0.0,50000.0,27000.0)
-        price_lag_1h = st.number_input("Price lag 1h (EUR/MWh)", 0.0, 1000.0, 50.0)
-        price_lag_24h = st.number_input("Price lag 24h (EUR/MWh)",0.0,1000.0,48.0)
-        nuclear = st.number_input("Nuclear (MW)",  0.0, 10000.0, 7000.0)
+    raw = render_raw_input_form(key_prefix="classify_")
 
-renewable = solar + wind
-fossil = gas
-total_gen = renewable + fossil + nuclear if (renewable + fossil + nuclear) != 0 else 0.0
-renewable_pct = (renewable / total_gen * 100.0) if total_gen != 0 else 0.0
-
-features = {
-    "hour": hour,
-    "month": month,
-    "is_weekend": int(weekend),
-    "generation solar": solar,
-    "generation wind onshore": wind,
-    "generation nuclear": nuclear,
-    "generation fossil gas": gas,
-    "renewable": renewable,
-    "fossil": fossil,
-    "nuclear": nuclear,
-    "renewable_pct": renewable_pct,
-    "demand_lag_1h": demand_lag_1h,
-    "demand_lag_24h": demand_lag_24h,
-    "demand_lag_168h": demand_lag_168h,
-    "price_lag_1h": price_lag_1h,
-    "price_lag_24h": price_lag_24h,
-}
+_built          = build_all_features(raw)
+demand_features = _built['demand_features']
+price_features  = _built['price_features']
+# ── END INPUT SECTION ─────────────────────────────────────────────────────────
 
 if st.button("Classify"):
-    d_result = classify_demand(features)
-    p_result = classify_price(features)
+    d_result = classify_demand(demand_features)
+    p_result = classify_price(price_features)
 
     if d_result and p_result:
         st.divider()

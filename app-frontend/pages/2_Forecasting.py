@@ -3,12 +3,14 @@ Forecasting page: build a feature vector from sliders, call /predict/both,
 display 12-step ahead forecast from the historical dataset.
 """
 import datetime
+from pathlib import Path
+
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 st.set_page_config(page_title="Forecasting", layout="wide")
 
-with open("assets/style.css") as f:
+with open(Path(__file__).resolve().parents[1] / "assets" / "style.css") as f:
     st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
 from components.sidebar import render_sidebar
@@ -22,53 +24,30 @@ st.divider()
 
 df = load_dataset()
 
-# ── Controls ──────────────────────────────────────────────────────────────────
+# ── INPUT SECTION (replaced) ──────────────────────────────────────────────────
+from components.raw_input_form import render_raw_input_form
+from services.feature_engineering import build_all_features
+
 st.markdown("### Input Features")
-col1, col2, col3 = st.columns(3)
+with st.expander("Input Features", expanded=True):
+    raw = render_raw_input_form(key_prefix="forecast_")
 
-with col1:
-    st.markdown("##### Target Timestamp")
-    date_val = st.date_input("Date", datetime.date(2018, 5, 1))
-    time_val = st.time_input("Time", datetime.time(12, 0))
-    timestamp = f"{date_val} {time_val}"
-with col2:
-    st.markdown("##### Renewable Gen (MW)")
-    solar = st.number_input("Solar (MW)", 0.0, 20000.0, 5000.0, step=100.0)
-    wind  = st.number_input("Wind Onshore (MW)", 0.0, 30000.0, 8000.0, step=100.0)
-    hydro = st.number_input("Hydro Water Res. (MW)", 0.0, 20000.0, 2000.0, step=100.0)
-with col3:
-    st.markdown("##### Non-Renewable (MW)")
-    gas     = st.number_input("Fossil Gas (MW)", 0.0, 20000.0, 4000.0, step=100.0)
-    coal    = st.number_input("Fossil Hard Coal (MW)", 0.0, 20000.0, 1500.0, step=100.0)
-    nuclear = st.number_input("Nuclear (MW)", 0.0, 20000.0, 7000.0, step=100.0)
+_built          = build_all_features(raw)
+demand_features = _built['demand_features']   # 19 features → demand model
+price_features  = _built['price_features']    # 19 features → price model
+gen_breakdown   = _built['generation_breakdown']
 
-st.markdown("##### External Forecasts")
-fc1, fc2, fc3, fc4 = st.columns(4)
-with fc1:
-    fc_wind = st.number_input("Forecast Wind Onshore (MW)", 0.0, 30000.0, 8000.0, step=100.0)
-with fc2:
-    fc_solar = st.number_input("Forecast Solar (MW)", 0.0, 20000.0, 5000.0, step=100.0)
-with fc3:
-    load_fc = st.number_input("Total Load Forecast (MW)", 0.0, 50000.0, 28000.0, step=100.0)
-with fc4:
-    fc_price = st.number_input("Price Day Ahead (EUR/MWh)", 0.0, 1000.0, 50.0, step=1.0)
-
-features = {
-    "timestamp": timestamp,
-    "generation solar": solar,
-    "generation wind onshore": wind,
-    "generation nuclear": nuclear,
-    "generation fossil gas": gas,
-    "generation fossil hard coal": coal,
-    "generation hydro water reservoir": hydro,
-    "forecast wind onshore day ahead": fc_wind,
-    "forecast solar day ahead": fc_solar,
-    "total load forecast": load_fc,
-    "price day ahead": fc_price
-}
+# Show computed generation mix
+_gc1, _gc2, _gc3, _gc4, _gc5 = st.columns(5)
+_gc1.metric("Renewable",   f"{gen_breakdown['Renewable']:,.0f} MW")
+_gc2.metric("Fossil",      f"{gen_breakdown['Fossil']:,.0f} MW")
+_gc3.metric("Nuclear",     f"{gen_breakdown['Nuclear']:,.0f} MW")
+_gc4.metric("Other",       f"{gen_breakdown['Other']:,.0f} MW")
+_gc5.metric("Renewable %", f"{gen_breakdown['Renewable %']:.1f}%")
+# ── END INPUT SECTION ─────────────────────────────────────────────────────────
 
 if st.button("Run Prediction"):
-    result = predict_both(features)
+    result = predict_both(demand_features)
     if result:
         st.divider()
         c1, c2 = st.columns(2)

@@ -105,6 +105,11 @@ REC_TABLE       = load('rec_table.pkl')
 thresholds      = load('thresholds.pkl')
 print("All artifacts loaded.")
 
+
+def get_cluster_count() -> int:
+    """Return the trained cluster count with a safe fallback."""
+    return int(thresholds.get('best_k', getattr(kmeans_model, 'n_clusters', 0)))
+
 try:
     print("Loading historical dataset for feature extraction...")
     HIST_DF = pd.read_csv('energy_dataset.csv')
@@ -410,7 +415,7 @@ def health():
         "demand_features"   : len(demand_features),
         "price_features"    : len(price_features),
         "test_set_profiles" : len(profile_df),
-        "n_clusters"        : int(thresholds['best_k']),
+        "n_clusters"        : get_cluster_count(),
     }
 
 
@@ -519,7 +524,7 @@ def cluster_endpoint(data: DemandInput):
     cl  = get_cluster(raw)
     return {
         "cluster_id"  : cl,
-        "n_clusters"  : int(thresholds['best_k']),
+        "n_clusters"  : get_cluster_count(),
         "note"        : "See /clusters/profiles for mean demand/price per cluster.",
     }
 
@@ -703,7 +708,7 @@ def model_comparison():
         "classifier_demand"       : type(clf_demand).__name__,
         "classifier_price"        : type(clf_price).__name__,
         "clustering_model"        : type(kmeans_model).__name__,
-        "n_clusters"              : int(thresholds['best_k']),
+        "n_clusters"              : get_cluster_count(),
         "demand_features_count"   : len(demand_features),
         "price_features_count"    : len(price_features),
         "demand_features"         : demand_features,

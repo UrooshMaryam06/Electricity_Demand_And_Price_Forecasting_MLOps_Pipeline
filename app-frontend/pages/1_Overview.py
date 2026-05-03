@@ -2,10 +2,13 @@
 System overview: KPIs, best model, recent pipeline status.
 This is the "executive view" — one page that shows if everything is working.
 """
+import json
+from pathlib import Path
+
 import streamlit as st
 st.set_page_config(page_title="Overview", layout="wide")
 
-with open("assets/style.css") as f:
+with open(Path(__file__).resolve().parents[1] / "assets" / "style.css") as f:
     st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
 from components.sidebar import render_sidebar
@@ -55,3 +58,20 @@ if comparison:
     r2_d   = [comparison[m].get("demand_r2",   0) for m in models]
     fig = model_comparison_bar(models, rmse_d, r2_d, "Demand Forecasting — All Models")
     st.plotly_chart(fig, use_container_width=True)
+
+st.divider()
+st.markdown("**Experiment Log Snapshot**")
+log_path = Path("../artifacts/experiment_log.json")
+if log_path.exists():
+    try:
+        with open(log_path, "r", encoding="utf8") as f:
+            exp_log = json.load(f)
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Best Demand Model", exp_log.get("best_models", {}).get("demand", {}).get("model", "N/A"))
+        c2.metric("Best Price Model", exp_log.get("best_models", {}).get("price", {}).get("model", "N/A"))
+        c3.metric("Chosen k", str(exp_log.get("clustering", {}).get("chosen_k", "N/A")))
+        st.caption(exp_log.get("observations", {}).get("deployment_speed", ""))
+    except Exception as e:
+        st.warning(f"Could not load experiment log: {e}")
+else:
+    st.info("Run the notebook log cell to generate artifacts/experiment_log.json.")
