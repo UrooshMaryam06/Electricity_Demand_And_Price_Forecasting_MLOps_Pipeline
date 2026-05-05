@@ -52,14 +52,12 @@ st.divider()
 comparison = get_model_comparison()
 if comparison:
     st.markdown("**Model Performance Summary**")
-    models = [m for m in comparison.keys() if isinstance(comparison[m], dict)]
-    rmse_d = [float(comparison[m].get("demand_nmae", comparison[m].get("demand_rmse", 0))) for m in models]
-    r2_d   = [float(comparison[m].get("demand_r2", 0)) for m in models]
-    if models:
-        fig = model_comparison_bar(models, rmse_d, r2_d, "Demand Forecasting — All Models")
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.info("No model metrics available yet.")
+    # Parse the comparison response — adjust field names to match your API response
+    models = [m for m in comparison if isinstance(comparison[m], dict)]
+    rmse_d = [comparison[m].get("demand_rmse", 0) for m in models]
+    r2_d   = [comparison[m].get("demand_r2",   0) for m in models]
+    fig = model_comparison_bar(models, rmse_d, r2_d, "Demand Forecasting — All Models")
+    st.plotly_chart(fig, use_container_width=True)
 
 st.divider()
 st.markdown("**Experiment Log Snapshot**")

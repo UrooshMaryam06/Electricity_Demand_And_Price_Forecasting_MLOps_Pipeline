@@ -135,7 +135,9 @@ with tabs[1]:
             res = predict_both(p)
             if not res:
                 continue
-            rows.append(
+            if not isinstance(vals, dict): continue
+        if not isinstance(vals, dict): continue
+        rows.append(
                 {
                     "step": step + 1,
                     "hour": step_dt.hour,
@@ -169,9 +171,9 @@ with tabs[2]:
     if metrics:
         rows = []
         for model_name, vals in metrics.items():
-            if not isinstance(vals, dict):
-                continue
-            rows.append(
+            if not isinstance(vals, dict): continue
+        if not isinstance(vals, dict): continue
+        rows.append(
                 {
                     "Model": model_name,
                     "Demand R2": float(vals.get("demand_r2", 0.0)),

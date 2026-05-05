@@ -9,8 +9,8 @@ services:
       - "8000:8000"
     volumes:
       - ./artifacts:/app/artifacts
+      - ./energy_dataset.csv:/app/energy_dataset.csv
     restart: unless-stopped
-
   frontend:
     build:
       context: ./app-frontend
@@ -22,7 +22,9 @@ services:
       - API_BASE_URL=http://api:8000
       - DATA_PATH=/app/energy_dataset.csv
     volumes:
+      - ./artifacts:/app/artifacts
       - ./energy_dataset.csv:/app/energy_dataset.csv
+    command: streamlit run Home.py --server.port=8501 --server.address=0.0.0.0 --server.headless=true --browser.gatherUsageStats=false
     depends_on:
       - api
     restart: unless-stopped

@@ -83,8 +83,8 @@ def get_cluster_profiles() -> dict | None:
 # --- Model comparison ---
 @st.cache_data(ttl=300)
 def get_model_comparison() -> dict | None:
-    """GET /models/compare — returns model registry info."""
-    return _get("/models/compare")
+    """GET /models/compare_metrics — returns per-model performance metrics."""
+    return _get("/models/compare_metrics")
 
 @st.cache_data(ttl=300)
 def get_model_registry() -> dict | None:

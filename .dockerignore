@@ -1,6 +1,12 @@
-__pycache__/
-*.pyc
-*.pyo
-*.ipynb
-.git/
-.env
+# Virtual environments
+venv/
+.venv/
+env/
+# Data and Models
+*.csv
+*.pkl
+*.parquet
+data/
+# System/IDE
+.vscode/
+.idea/

@@ -31,11 +31,9 @@ rows = []
 for model_name, metrics in data.items():
     # Support multiple metric naming conventions from the backend
     def get_metric(keys, default=0.0):
-        if isinstance(keys, str):
-            keys = [keys]
         for k in keys:
-            if isinstance(metrics, dict) and k in metrics:
-                return metrics[k]
+            if k in metrics:
+                return metrics.get(k)
         return default
 
     rows.append({

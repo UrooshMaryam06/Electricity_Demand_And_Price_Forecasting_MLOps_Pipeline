@@ -106,6 +106,7 @@ def build_demand_features(raw: dict) -> dict:
         return float(val) if val is not None else float(default)
 
     return {
+        'timestamp':                       raw.get('time_str', '2018-01-01 00:00:00'),
         'day_of_week':                     time['day_of_week'],
         'month_sin':                       time['month_sin'],
         'month_cos':                       time['month_cos'],
@@ -137,6 +138,7 @@ def build_price_features(raw: dict) -> dict:
         return float(val) if val is not None else float(default)
 
     return {
+        'timestamp':                       raw.get('time_str', '2018-01-01 00:00:00'),
         'day_of_week':                     time['day_of_week'],
         'month_sin':                       time['month_sin'],
         'month_cos':                       time['month_cos'],
