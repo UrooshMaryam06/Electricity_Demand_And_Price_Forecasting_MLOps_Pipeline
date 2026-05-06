@@ -1,6 +1,6 @@
 import os
 
-API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
+API_BASE_URL = os.getenv("API_BASE_URL", "https://urooshm46-electricity-forecast-api.hf.space")
 API_TIMEOUT  = 10
 
 COLORS = {
