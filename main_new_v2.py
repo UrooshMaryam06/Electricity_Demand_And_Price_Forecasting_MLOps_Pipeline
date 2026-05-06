@@ -23,6 +23,7 @@
 # ============================================================
 
 from fastapi import FastAPI, HTTPException
+from fastapi import UploadFile, File, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Optional, List
@@ -493,7 +494,6 @@ def classify_demand_endpoint(data: DemandInput):
         },
     }
 
-
 @app.post("/classify/price", tags=["Classification"])
 def classify_price_endpoint(data: PriceInput):
     """
@@ -809,6 +809,67 @@ def predict_all(input_data: BothInput):
         },
         "recommendation": recommendation
     }
+
+# -------------------- File upload endpoint --------------------
+@app.post("/upload/dataset", tags=["Admin"])
+async def upload_dataset(
+    file: UploadFile = File(...),
+    replace: bool = True,
+    x_admin_token: Optional[str] = Header(None),
+    token: Optional[str] = None,
+):
+    """
+    Upload a CSV dataset (multipart/form-data). The uploaded file will be
+    saved to the current working directory. If `replace` is True (default)
+    and the file looks like a CSV, the app will attempt to reload the
+    historical dataset used for lag/rolling features (`HIST_DF`).
+
+    If an environment variable `ADMIN_UPLOAD_TOKEN` is set, the same value
+    must be provided as the `X-ADMIN-TOKEN` header or `token` query param.
+
+    Minimal validation checks for the presence of `time`, `total load actual`,
+    and `price actual` columns before replacing the in-memory historical DF.
+    """
+    filename = file.filename or "uploaded_dataset.csv"
+    save_path = os.path.join(os.getcwd(), filename)
+
+    # Enforce admin token if configured via environment
+    admin_token = os.environ.get('ADMIN_UPLOAD_TOKEN', '')
+    if admin_token:
+        provided = x_admin_token or token
+        if not provided or provided != admin_token:
+            raise HTTPException(status_code=401, detail='Missing or invalid admin token')
+
+    try:
+        contents = await file.read()
+        with open(save_path, "wb") as f:
+            f.write(contents)
+
+        # Try to refresh the in-memory historical dataframe used for feature extraction
+        global HIST_DF
+        try:
+            if filename.lower().endswith('.csv') and replace:
+                tmp = pd.read_csv(save_path)
+                # Validate presence of minimal required columns
+                required_cols = ['time', 'total load actual', 'price actual']
+                missing = [c for c in required_cols if c not in tmp.columns]
+                if missing:
+                    return {
+                        "status": "warning",
+                        "saved_path": save_path,
+                        "message": f"Uploaded CSV is missing required columns: {missing}. HIST_DF not replaced.",
+                    }
+                if 'time' in tmp.columns:
+                    tmp['time'] = pd.to_datetime(tmp['time'], utc=True)
+                    tmp = tmp.sort_values('time').set_index('time')
+                HIST_DF = tmp
+        except Exception:
+            # Non-fatal: file saved but HIST_DF refresh failed
+            pass
+
+        return {"status": "ok", "saved_path": save_path, "rows": None if HIST_DF.empty else len(HIST_DF)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/", tags=["Home"])

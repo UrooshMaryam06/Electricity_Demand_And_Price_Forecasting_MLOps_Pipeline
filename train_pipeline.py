@@ -25,6 +25,7 @@ from typing import Dict, Any, Tuple
 
 import numpy as np
 import pandas as pd
+import os
 
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
@@ -150,6 +151,27 @@ def write_metadata(metadata: Dict[str, Any], artifacts_dir: Path) -> Path:
     return p
 
 
+def send_discord_notification(webhook_url: str, message: str, username: str = "mlops-pipeline") -> None:
+    """Send a simple Discord webhook message. Uses `requests` if available
+    and falls back to urllib if not. Failures are swallowed to avoid
+    breaking the training flow."""
+    payload = {"content": message, "username": username}
+    try:
+        import requests
+        requests.post(webhook_url, json=payload, timeout=5)
+        return
+    except Exception:
+        pass
+
+    try:
+        import urllib.request, json as _json
+        req = urllib.request.Request(webhook_url, data=_json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
+        urllib.request.urlopen(req, timeout=5)
+    except Exception:
+        # best-effort: ignore notification failures
+        return
+
+
 def build_and_run_pipeline(csv_path: Path, artifacts_dir: Path = Path("artifacts")) -> Dict[str, Any]:
     df = load_data(csv_path)
 
@@ -177,10 +199,22 @@ def build_and_run_pipeline(csv_path: Path, artifacts_dir: Path = Path("artifacts
     cluster_info = cluster_and_persist(X, artifacts_dir)
     assoc_result = run_association_task(df)
 
+    # Save feature lists as pickles for the API to load
+    ensure_artifacts_dir(artifacts_dir)
+    feature_list = list(feature_cols)
+    with open(artifacts_dir / "demand_features.pkl", "wb") as f:
+        pickle.dump(feature_list, f)
+    with open(artifacts_dir / "price_features.pkl", "wb") as f:
+        pickle.dump(feature_list, f)
+    with open(artifacts_dir / "reg_demand_features.pkl", "wb") as f:
+        pickle.dump(feature_list, f)
+    with open(artifacts_dir / "reg_price_features.pkl", "wb") as f:
+        pickle.dump(feature_list, f)
+
     metadata = {
         "regressors": reg_paths,
         "classifiers": clf_paths,
-        "features": list(feature_cols),
+        "features": feature_list,
         "cluster_profiles": cluster_info,
         "association_rules": assoc_result,
     }
@@ -192,7 +226,22 @@ def build_and_run_pipeline(csv_path: Path, artifacts_dir: Path = Path("artifacts
 if _HAS_PREFECT:
     @flow
     def prefect_build_pipeline(csv_path: str, artifacts_dir: str = "artifacts"):
-        return build_and_run_pipeline(Path(csv_path), Path(artifacts_dir))
+        webhook = os.environ.get("DISCORD_WEBHOOK_URL", "")
+        try:
+            result = build_and_run_pipeline(Path(csv_path), Path(artifacts_dir))
+            if webhook:
+                try:
+                    send_discord_notification(webhook, f"Prefect pipeline finished: {result.get('metadata_path')}")
+                except Exception:
+                    pass
+            return result
+        except Exception as e:
+            if webhook:
+                try:
+                    send_discord_notification(webhook, f"Prefect pipeline FAILED: {e}")
+                except Exception:
+                    pass
+            raise
 
 
 def main():
