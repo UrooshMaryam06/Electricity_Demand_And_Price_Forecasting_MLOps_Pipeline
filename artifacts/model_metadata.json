@@ -1,0 +1,10 @@
+{
+  "saved": [
+    "demand_model.pkl",
+    "price_model.pkl",
+    "features.pkl",
+    "demand_thresholds.pkl",
+    "price_thresholds.pkl"
+  ],
+  "timestamp": "2026-05-05T21:00:23.375005+00:00"
+}

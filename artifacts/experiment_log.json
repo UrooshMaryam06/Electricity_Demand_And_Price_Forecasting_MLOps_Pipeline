@@ -1,0 +1,234 @@
+{
+  "source": "colab_modeltraining_v4.ipynb",
+  "best_models": {
+    "demand": {
+      "model": "RandomForest",
+      "metrics": {
+        "cv_f1_macro": 0.8017744151845975,
+        "accuracy": 0.8419461638117173,
+        "macro_f1": 0.8423008315882682,
+        "report": "              precision    recall  f1-score   support\n\n        High       0.87      0.86      0.87      2421\n         Low       0.88      0.89      0.88      2199\n      Medium       0.78      0.78      0.78      2327\n\n    accuracy                           0.84      6947\n   macro avg       0.84      0.84      0.84      6947\nweighted avg       0.84      0.84      0.84      6947\n"
+      }
+    },
+    "price": {
+      "model": "RandomForest",
+      "metrics": {
+        "cv_f1_macro": 0.592622678936638,
+        "accuracy": 0.7655102922124658,
+        "macro_f1": 0.7240717891921786,
+        "report": "              precision    recall  f1-score   support\n\n        High       0.93      0.80      0.86      4255\n         Low       0.66      0.74      0.69       847\n      Medium       0.55      0.70      0.62      1845\n\n    accuracy                           0.77      6947\n   macro avg       0.71      0.75      0.72      6947\nweighted avg       0.80      0.77      0.78      6947\n"
+      }
+    }
+  },
+  "regression": {
+    "Linear Regression": {
+      "demand_r2_raw": 0.6389030754456289,
+      "price_r2_raw": 0.6809147170592617,
+      "demand_r2_pca": 0.4472112851468728,
+      "price_r2_pca": 0.7010785482867795
+    },
+    "KNN (k=5)": {
+      "demand_r2_raw": 0.5459651947629611,
+      "price_r2_raw": -1.102157293059653,
+      "demand_r2_pca": 0.5371528235518609,
+      "price_r2_pca": 0.5018374279249682
+    },
+    "Decision Tree": {
+      "demand_r2_raw": 0.742091890864333,
+      "price_r2_raw": 0.5942773229294043,
+      "demand_r2_pca": 0.37652947259407243,
+      "price_r2_pca": 0.5172200728109027
+    },
+    "Bayesian Ridge": {
+      "demand_r2_raw": 0.6389018797359964,
+      "price_r2_raw": 0.6808590441046217,
+      "demand_r2_pca": 0.44724723395866994,
+      "price_r2_pca": 0.7010830620120936
+    },
+    "Random Forest": {
+      "demand_r2_raw": 0.8101686582810989,
+      "price_r2_raw": 0.7214617846657946
+    },
+    "XGBoost": {
+      "demand_r2_raw": 0.8151175332254792,
+      "price_r2_raw": 0.7363832451622825
+    },
+    "LightGBM": {
+      "demand_r2_raw": 0.8197158207492179,
+      "price_r2_raw": 0.7281816344503351
+    }
+  },
+  "classification": {
+    "demand": {
+      "RandomForest": {
+        "cv_f1_macro": 0.8017744151845975,
+        "accuracy": 0.8419461638117173,
+        "macro_f1": 0.8423008315882682,
+        "report": "              precision    recall  f1-score   support\n\n        High       0.87      0.86      0.87      2421\n         Low       0.88      0.89      0.88      2199\n      Medium       0.78      0.78      0.78      2327\n\n    accuracy                           0.84      6947\n   macro avg       0.84      0.84      0.84      6947\nweighted avg       0.84      0.84      0.84      6947\n"
+      },
+      "XGBoost": {
+        "cv_f1_macro": 0.7998312766560585,
+        "accuracy": 0.8428098459766806,
+        "macro_f1": 0.8433325411671827,
+        "report": "              precision    recall  f1-score   support\n\n        High       0.88      0.85      0.86      2421\n         Low       0.88      0.90      0.89      2199\n      Medium       0.78      0.78      0.78      2327\n\n    accuracy                           0.84      6947\n   macro avg       0.84      0.84      0.84      6947\nweighted avg       0.84      0.84      0.84      6947\n"
+      }
+    },
+    "price": {
+      "RandomForest": {
+        "cv_f1_macro": 0.592622678936638,
+        "accuracy": 0.7655102922124658,
+        "macro_f1": 0.7240717891921786,
+        "report": "              precision    recall  f1-score   support\n\n        High       0.93      0.80      0.86      4255\n         Low       0.66      0.74      0.69       847\n      Medium       0.55      0.70      0.62      1845\n\n    accuracy                           0.77      6947\n   macro avg       0.71      0.75      0.72      6947\nweighted avg       0.80      0.77      0.78      6947\n"
+      },
+      "XGBoost": {
+        "cv_f1_macro": 0.5882326132146949,
+        "accuracy": 0.7574492586728084,
+        "macro_f1": 0.7174387643709439,
+        "report": "              precision    recall  f1-score   support\n\n        High       0.93      0.79      0.85      4255\n         Low       0.64      0.76      0.70       847\n      Medium       0.54      0.68      0.60      1845\n\n    accuracy                           0.76      6947\n   macro avg       0.70      0.74      0.72      6947\nweighted avg       0.79      0.76      0.77      6947\n"
+      }
+    }
+  },
+  "clustering": {
+    "chosen_k": 3,
+    "best_k_by_silhouette": 2,
+    "cluster_sizes": {
+      "2": 4513,
+      "8": 4297,
+      "9": 3854,
+      "4": 3564,
+      "6": 3526,
+      "1": 3522,
+      "0": 3382,
+      "7": 3274,
+      "3": 2958,
+      "5": 1842
+    }
+  },
+  "recommendation": {
+    "best_demand_classifier": "RandomForest",
+    "best_price_classifier": "RandomForest"
+  },
+  "all_trained_models": [
+    {
+      "task": "regression_baseline",
+      "model": "Linear Regression",
+      "demand_r2_raw": 0.6389030754456289,
+      "price_r2_raw": 0.6809147170592617,
+      "demand_r2_pca": 0.4472112851468728,
+      "price_r2_pca": 0.7010785482867795
+    },
+    {
+      "task": "regression_baseline",
+      "model": "KNN (k=5)",
+      "demand_r2_raw": 0.5459651947629611,
+      "price_r2_raw": -1.102157293059653,
+      "demand_r2_pca": 0.5371528235518609,
+      "price_r2_pca": 0.5018374279249682
+    },
+    {
+      "task": "regression_baseline",
+      "model": "Decision Tree",
+      "demand_r2_raw": 0.742091890864333,
+      "price_r2_raw": 0.5942773229294043,
+      "demand_r2_pca": 0.37652947259407243,
+      "price_r2_pca": 0.5172200728109027
+    },
+    {
+      "task": "regression_baseline",
+      "model": "Bayesian Ridge",
+      "demand_r2_raw": 0.6389018797359964,
+      "price_r2_raw": 0.6808590441046217,
+      "demand_r2_pca": 0.44724723395866994,
+      "price_r2_pca": 0.7010830620120936
+    },
+    {
+      "task": "regression_baseline",
+      "model": "Random Forest",
+      "demand_r2_raw": 0.8101686582810989,
+      "price_r2_raw": 0.7214617846657946,
+      "demand_r2_pca": NaN,
+      "price_r2_pca": NaN
+    },
+    {
+      "task": "regression_baseline",
+      "model": "XGBoost",
+      "demand_r2_raw": 0.8151175332254792,
+      "price_r2_raw": 0.7363832451622825,
+      "demand_r2_pca": NaN,
+      "price_r2_pca": NaN
+    },
+    {
+      "task": "regression_baseline",
+      "model": "LightGBM",
+      "demand_r2_raw": 0.8197158207492179,
+      "price_r2_raw": 0.7281816344503351,
+      "demand_r2_pca": NaN,
+      "price_r2_pca": NaN
+    },
+    {
+      "task": "classification_demand",
+      "model": "RandomForest",
+      "cv_f1_macro": 0.8017744151845975,
+      "accuracy": 0.8419461638117173,
+      "macro_f1": 0.8423008315882682
+    },
+    {
+      "task": "classification_demand",
+      "model": "XGBoost",
+      "cv_f1_macro": 0.7998312766560585,
+      "accuracy": 0.8428098459766806,
+      "macro_f1": 0.8433325411671827
+    },
+    {
+      "task": "classification_price",
+      "model": "RandomForest",
+      "cv_f1_macro": 0.592622678936638,
+      "accuracy": 0.7655102922124658,
+      "macro_f1": 0.7240717891921786
+    },
+    {
+      "task": "classification_price",
+      "model": "XGBoost",
+      "cv_f1_macro": 0.5882326132146949,
+      "accuracy": 0.7574492586728084,
+      "macro_f1": 0.7174387643709439
+    },
+    {
+      "task": "clustering",
+      "model": "KMeans",
+      "best_k_by_silhouette": 2,
+      "chosen_k": 3
+    },
+    {
+      "task": "regression_advanced",
+      "model": "Random Forest",
+      "demand_r2": 0.8101686582810989,
+      "price_r2": 0.7214617846657946
+    },
+    {
+      "task": "regression_advanced",
+      "model": "XGBoost",
+      "demand_r2": 0.8151175332254792,
+      "price_r2": 0.7363832451622825
+    },
+    {
+      "task": "regression_advanced",
+      "model": "LightGBM",
+      "demand_r2": 0.8197158207492179,
+      "price_r2": 0.7281816344503351
+    }
+  ],
+  "observations": {
+    "best_performing_model": "RandomForest / RandomForest",
+    "data_quality_issues": [
+      "Handled missing and duplicate features during preprocessing.",
+      "Standardized time-based features and lagged values before training."
+    ],
+    "overfitting_patterns": [
+      "Compared raw and PCA-based regression scores to spot instability.",
+      "Tracked train/test behavior for classification and clustering models."
+    ],
+    "deployment_speed": "Artifacts are saved once and served through thin API endpoints.",
+    "prefect_reliability": "Local artifact logs provide a fallback when orchestration is unavailable."
+  }
+}

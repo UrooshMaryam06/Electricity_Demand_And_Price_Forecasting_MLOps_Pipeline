@@ -1,0 +1,5 @@
+section,task,model
+best_model,demand,RandomForest
+best_model,price,RandomForest
+clustering,chosen_k,3
+clustering,best_k_by_silhouette,2
